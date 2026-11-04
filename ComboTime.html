@@ -1,0 +1,2351 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Combo Time - Mystery Spots Arcade Edition</title>
+  <style>
+    :root {
+      --bg-overlay: rgba(10, 15, 30, 0.65);
+      --card-bg: rgba(20, 30, 50, 0.9);
+      --accent-color: #38bdf8;
+      --text-color: #f8fafc;
+      --text-dim: #94a3b8;
+      --board-bg: rgba(2, 6, 23, 0.9);
+    }
+
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: #050b14;
+      color: var(--text-color);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    #bgCanvas {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    .bg-overlay {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: var(--bg-overlay);
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    /* パフォーマンスモニター (FPS, CPU, GPS) */
+    .perf-monitor {
+      position: fixed;
+      top: 8px;
+      right: 8px;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-family: monospace;
+      font-size: 10px;
+      color: #38bdf8;
+      z-index: 90;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+    }
+    .perf-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .perf-val {
+      color: #fcd34d;
+      font-weight: bold;
+    }
+
+    .game-container {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      max-width: 100vw;
+      max-height: 100vh;
+      padding: 4px;
+    }
+
+    .main-layout {
+      display: flex;
+      flex-direction: row;
+      gap: 12px;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .side-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      width: 105px;
+    }
+
+    .panel-box {
+      background: var(--card-bg);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      backdrop-filter: blur(8px);
+      border-radius: 6px;
+      padding: 4px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    }
+
+    .panel-title {
+      font-size: 9px;
+      font-weight: bold;
+      color: var(--text-dim);
+      margin-bottom: 2px;
+      letter-spacing: 1px;
+    }
+
+    .value-display {
+      font-size: 13px;
+      font-weight: bold;
+      color: var(--accent-color);
+      font-family: monospace;
+    }
+
+    .canvas-wrapper {
+      position: relative;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+      border-radius: 8px;
+      overflow: hidden;
+      border: 2px solid rgba(255, 255, 255, 0.25);
+    }
+
+    canvas {
+      display: block;
+      background-color: var(--board-bg);
+    }
+
+    #board {
+      width: 100%;
+      height: 100%;
+    }
+
+    .controls-container {
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+      max-width: 520px;
+      margin-top: 4px;
+      gap: 20px;
+    }
+
+    .control-group {
+      display: flex;
+      gap: 6px;
+      flex: 1;
+    }
+
+    .touch-btn {
+      background: var(--card-bg);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: var(--text-color);
+      border-radius: 8px;
+      padding: 10px 0;
+      font-size: 12px;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      backdrop-filter: blur(4px);
+      flex: 1;
+    }
+
+    .touch-btn:active {
+      background: var(--accent-color);
+      color: #000;
+      transform: scale(0.95);
+    }
+
+    .btn-pause {
+      background: rgba(239, 68, 68, 0.3);
+      border-color: rgba(239, 68, 68, 0.5);
+      flex: 0.6;
+    }
+
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(2, 6, 23, 0.9);
+      backdrop-filter: blur(6px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+
+    .modal-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .modal-content {
+      background: var(--card-bg);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 12px;
+      padding: 18px;
+      width: 350px;
+      max-height: 90vh;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.8);
+    }
+
+    .modal-title {
+      font-size: 18px;
+      font-weight: bold;
+      text-align: center;
+      color: var(--accent-color);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+      padding-bottom: 6px;
+      letter-spacing: 2px;
+    }
+
+    .menu-btn {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: var(--text-color);
+      padding: 10px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.2s;
+      text-align: center;
+    }
+
+    .menu-btn:hover { background: rgba(255, 255, 255, 0.2); }
+
+    .toggle-option {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+    }
+
+    .toggle-switch {
+      position: relative;
+      width: 42px;
+      height: 20px;
+      appearance: none;
+      background: #334155;
+      outline: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .toggle-switch:checked { background: var(--accent-color); }
+    .toggle-switch::before {
+      content: '';
+      position: absolute;
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      top: 2px; left: 2px;
+      background: #fff;
+      transition: transform 0.2s;
+    }
+    .toggle-switch:checked::before { transform: translateX(22px); }
+
+    .config-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .config-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+    }
+
+    .config-btn {
+      background: #0f172a;
+      border: 1px solid var(--accent-color);
+      color: var(--accent-color);
+      padding: 3px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      min-width: 80px;
+      text-align: center;
+      cursor: pointer;
+    }
+
+    .config-btn.waiting {
+      background: var(--accent-color);
+      color: #000;
+      animation: pulse 1s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .arcade-screen {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(2, 6, 23, 0.95);
+      z-index: 50;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 16px;
+      text-align: center;
+      transition: opacity 0.3s ease;
+      overflow-y: auto;
+    }
+
+    /* ポップで躍動感のある COMBO TIME タイトルロゴ */
+    .arcade-title {
+      font-size: 38px;
+      font-weight: 900;
+      font-family: 'Arial Black', Impact, sans-serif;
+      background: linear-gradient(185deg, #fde047 0%, #f59e0b 50%, #f43f5e 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow: 0 4px 15px rgba(245, 158, 11, 0.5);
+      letter-spacing: 2px;
+      line-height: 1.1;
+      transform: rotate(-3deg);
+    }
+
+    .arcade-title span {
+      display: block;
+      font-size: 13px;
+      font-family: sans-serif;
+      font-weight: 800;
+      color: #38bdf8;
+      -webkit-text-fill-color: #38bdf8;
+      letter-spacing: 4px;
+      margin-top: 4px;
+      transform: rotate(3deg);
+    }
+
+    .arcade-subtitle {
+      font-size: 13px;
+      color: #38bdf8;
+      animation: blink 1s infinite;
+      cursor: pointer;
+      padding: 8px 18px;
+      background: rgba(56, 189, 248, 0.1);
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      border-radius: 20px;
+      margin-top: 5px;
+    }
+
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+    .ranking-box {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 8px;
+      padding: 8px;
+      width: 300px;
+      font-family: monospace;
+      font-size: 11px;
+    }
+
+    .ranking-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 3px 0;
+      color: #cbd5e1;
+      border-bottom: 1px dashed rgba(255,255,255,0.1);
+    }
+
+    .ranking-row:last-child {
+      border-bottom: none;
+    }
+
+    .name-entry-wrapper {
+      background: rgba(15, 23, 42, 0.95);
+      border: 2px solid #f59e0b;
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 0 25px rgba(245, 158, 11, 0.3);
+      max-width: 340px;
+      width: 100%;
+    }
+
+    .initial-inputs {
+      display: flex;
+      gap: 12px;
+      font-size: 32px;
+      font-family: monospace;
+      font-weight: bold;
+      margin: 2px 0;
+    }
+
+    .initial-char {
+      width: 46px;
+      height: 54px;
+      background: #020617;
+      border: 3px solid var(--accent-color);
+      color: var(--accent-color);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      box-shadow: inset 0 0 10px rgba(56, 189, 248, 0.2);
+    }
+    .initial-char.active {
+      background: var(--accent-color);
+      color: #000;
+      border-color: #f59e0b;
+      box-shadow: 0 0 15px var(--accent-color);
+      transform: scale(1.05);
+    }
+
+    .entry-arrows {
+      display: flex;
+      gap: 6px;
+      width: 100%;
+    }
+
+    .arrow-btn {
+      flex: 1;
+      background: rgba(56, 189, 248, 0.15);
+      border: 1px solid var(--accent-color);
+      color: var(--accent-color);
+      padding: 6px;
+      border-radius: 6px;
+      font-weight: bold;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    .arrow-btn:active {
+      background: var(--accent-color);
+      color: #000;
+    }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+  <!-- FPS / CPU / GPS モニター -->
+  <div class="perf-monitor" id="perfMonitor">
+    <div class="perf-row"><span>FPS:</span><span class="perf-val" id="valFps">60</span></div>
+    <div class="perf-row"><span>CPU:</span><span class="perf-val" id="valCpu">1.2ms</span></div>
+    <div class="perf-row"><span>GPS:</span><span class="perf-val" id="valGps">ACTIVE</span></div>
+  </div>
+
+  <canvas id="bgCanvas"></canvas>
+  <div class="bg-overlay"></div>
+
+  <!-- TITLE SCREEN -->
+  <div class="arcade-screen" id="arcadeTitleScreen">
+    <div class="arcade-title">COMBO TIME<br><span>MYSTERY SPOTS ARCADE</span></div>
+
+    <div class="ranking-box" id="titleRankingBox" style="margin-top: 10px;">
+      <div style="font-weight:bold; margin-bottom:4px; color:#fcd34d; font-size:12px;">--- HIGH SCORES ---</div>
+      <div style="display:flex; justify-content:space-between; font-size:9px; color:#94a3b8; border-bottom:1px solid rgba(255,255,255,0.2); padding-bottom:2px; margin-bottom:3px;">
+        <span>RANK / NAME</span>
+        <span>SCORE (LV / MAX COMBO)</span>
+      </div>
+      <div id="titleRankingList"></div>
+    </div>
+    <div class="arcade-subtitle" id="pressStartText">PRESS START / TAP TO PLAY</div>
+  </div>
+
+  <!-- INITIAL INPUT / GAME OVER SCREEN -->
+  <div class="arcade-screen hidden" id="initialInputScreen">
+    <div id="gameOverHeader">
+      <div style="font-size: 20px; font-weight: bold; color: #ef4444; margin-bottom: 2px;">GAME OVER</div>
+      <div style="font-size: 13px; color: #f59e0b; margin-bottom: 6px;" id="finalScoreText">SCORE: 0</div>
+    </div>
+
+    <!-- グラフ＆マイクロリプレイ -->
+    <div id="testScoreGraphContainer" style="background: rgba(15,23,42,0.85); border: 1px solid rgba(56,189,248,0.3); border-radius: 8px; padding: 8px; margin-bottom: 5px; width: 340px; display: flex; flex-direction: column; align-items: center; gap: 6px;">
+      
+      <div style="font-size: 9px; color: #38bdf8; font-family: monospace; width: 100%; text-align: left;">SCORE & DROP GRAPH</div>
+
+      <!-- スコア/コンボリアルタイムトレース数値大表示 -->
+      <div style="display: flex; justify-content: space-around; width: 100%; font-family: monospace; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 4px;">
+        <div style="font-size: 11px; color: #94a3b8;">SCORE: <span id="traceScoreDisplay" style="font-size: 18px; color: #38bdf8; font-weight: bold;">0</span></div>
+        <div style="font-size: 11px; color: #94a3b8;">COMBO: <span id="traceComboDisplay" style="font-size: 18px; color: #f59e0b; font-weight: bold;">0</span></div>
+      </div>
+
+      <!-- 左: スコア＆コンボグラフ / 右: マイクロリプレイ -->
+      <div style="display: flex; flex-direction: row; align-items: center; gap: 8px; width: 100%;">
+        <canvas id="testScoreGraphCanvas" width="240" height="90" style="background:#020617; border-radius:4px; display:block; flex-shrink: 0;"></canvas>
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 80px;">
+          <div style="font-size: 7px; color: #94a3b8; font-family: monospace; margin-bottom: 2px;">REPLAY</div>
+          <canvas id="microReplayCanvas" width="4" height="20" style="width: 40px; height: 80px; background:#020617; border: 1px solid rgba(56,189,248,0.5); image-rendering: pixelated; object-fit: contain;"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div id="initialEntryContainer" class="name-entry-wrapper">
+      <div style="font-size: 14px; font-weight: bold; color: #f59e0b; letter-spacing: 1px;">NEW HIGH SCORE!</div>
+      <div style="font-size: 10px; color: var(--text-dim);">INITIALS ENTRY</div>
+      
+      <div class="initial-inputs">
+        <div class="initial-char active" id="char0">A</div>
+        <div class="initial-char" id="char1">A</div>
+        <div class="initial-char" id="char2">A</div>
+      </div>
+
+      <div class="entry-arrows">
+        <button class="arrow-btn" id="btnPrevChar">◀ PREV</button>
+        <button class="arrow-btn" id="btnCharUp">▲ UP</button>
+        <button class="arrow-btn" id="btnCharDown">▼ DOWN</button>
+        <button class="arrow-btn" id="btnNextChar">NEXT ▶</button>
+      </div>
+
+      <button class="menu-btn" id="btnSubmitInitial" style="width: 100%; background: #0284c7; border-color: #38bdf8;">REGISTER SCORE</button>
+    </div>
+
+    <div id="backToTitleContainer" class="hidden" style="margin-top: 6px;">
+      <button class="menu-btn" id="btnBackToTitle" style="width: 180px; background: #334155;">BACK TO TITLE</button>
+    </div>
+  </div>
+
+  <div class="game-container">
+    <div class="main-layout">
+      <!-- Hold Panel -->
+      <div class="side-panel" id="holdContainer">
+        <div class="panel-box">
+          <div class="panel-title">HOLD</div>
+          <canvas id="holdCanvas" width="80" height="80"></canvas>
+        </div>
+        <div class="panel-box">
+          <div class="panel-title">SCORE</div>
+          <div class="value-display" id="scoreDisplay">0</div>
+        </div>
+        <div class="panel-box">
+          <div class="panel-title">LINES</div>
+          <div class="value-display" id="linesDisplay">0</div>
+        </div>
+      </div>
+
+      <!-- Main Board -->
+      <div class="canvas-wrapper" id="boardWrapper">
+        <canvas id="board" width="112" height="560"></canvas>
+      </div>
+
+      <!-- Next Panel & Stats -->
+      <div class="side-panel" id="nextContainer">
+        <div class="panel-box">
+          <div class="panel-title">NEXT</div>
+          <canvas id="nextCanvas" width="80" height="80"></canvas>
+        </div>
+        <div class="panel-box">
+          <div class="panel-title">LEVEL</div>
+          <div class="value-display" id="levelDisplay">1</div>
+        </div>
+        <div class="panel-box" id="comboContainer">
+          <div class="panel-title">COMBO</div>
+          <div class="value-display" id="comboDisplay" style="font-size: 24px; color: #f59e0b; line-height: 1;">0</div>
+        </div>
+        <div class="panel-box" id="comboBonusContainer" style="background: rgba(56, 189, 248, 0.1); border-color: var(--accent-color);">
+          <div class="panel-title">SUBTOTAL</div>
+          <div class="value-display" id="subtotalDisplay" style="font-size: 11px;">0</div>
+          <div class="panel-title" style="margin-top: 2px; font-size: 7px;">CALCULATION</div>
+          <div class="value-display" id="comboCalcDisplay" style="font-size: 7px; color: #fcd34d; line-height: 1.1; text-align: center;">-</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Touch Controls -->
+    <div class="controls-container" id="virtualControls">
+      <div class="control-group">
+        <button class="touch-btn" id="btnLeft">LEFT</button>
+        <button class="touch-btn" id="btnRotCCW">CCW</button>
+        <button class="touch-btn" id="btnRotCW">CW</button>
+      </div>
+      <div class="control-group" style="flex: 0.6;">
+        <button class="touch-btn btn-pause" id="btnPause">PAUSE</button>
+      </div>
+      <div class="control-group">
+        <button class="touch-btn" id="btnHold">HOLD</button>
+        <button class="touch-btn" id="btnSoftDrop">SOFT</button>
+        <button class="touch-btn" id="btnHardDrop">HARD</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pause Modal -->
+  <div class="modal-overlay" id="pauseModal">
+    <div class="modal-content">
+      <div class="modal-title">PAUSED</div>
+      <button class="menu-btn" id="btnResume">RESUME</button>
+      <button class="menu-btn" id="btnOpenOptions">OPTIONS</button>
+      <button class="menu-btn" id="btnReset">RESET</button>
+      <button class="menu-btn" id="btnQuitToTitle" style="background: rgba(239, 68, 68, 0.3);">QUIT TO TITLE</button>
+    </div>
+  </div>
+
+  <!-- Options Modal -->
+  <div class="modal-overlay" id="optionsModal">
+    <div class="modal-content">
+      <div class="modal-title">OPTIONS</div>
+      
+      <div class="toggle-option">
+        <span>SOUND FX</span>
+        <input type="checkbox" class="toggle-switch" id="optSound" checked>
+      </div>
+      <div class="toggle-option">
+        <span>MUSIC (BGM)</span>
+        <input type="checkbox" class="toggle-switch" id="optMusic" checked>
+      </div>
+      <div class="toggle-option">
+        <span>PERFORMANCE MONITOR</span>
+        <input type="checkbox" class="toggle-switch" id="optPerf" checked>
+      </div>
+      <div class="toggle-option">
+        <span>TOUCH CONTROLS</span>
+        <input type="checkbox" class="toggle-switch" id="optTouchControls" checked>
+      </div>
+      <div class="toggle-option">
+        <span>NEXT PREVIEW</span>
+        <input type="checkbox" class="toggle-switch" id="optNext" checked>
+      </div>
+      <div class="toggle-option">
+        <span>HOLD FEATURE</span>
+        <input type="checkbox" class="toggle-switch" id="optHold" checked>
+      </div>
+      <div class="toggle-option">
+        <span>COMBO SYSTEM</span>
+        <input type="checkbox" class="toggle-switch" id="optCombo" checked>
+      </div>
+      <div class="toggle-option">
+        <span>GHOST PREVIEW</span>
+        <input type="checkbox" class="toggle-switch" id="optGhost" checked>
+      </div>
+      <div class="toggle-option">
+        <span>VISUAL EFFECTS</span>
+        <input type="checkbox" class="toggle-switch" id="optEffects" checked>
+      </div>
+
+      <button class="menu-btn" id="btnOpenKeyconfig">GAMEPAD CONFIG</button>
+      <button class="menu-btn" id="btnCloseOptions">BACK</button>
+    </div>
+  </div>
+
+  <!-- Keyconfig Modal -->
+  <div class="modal-overlay" id="keyconfigModal">
+    <div class="modal-content">
+      <div class="modal-title">GAMEPAD CONFIG</div>
+      <div class="config-list" id="configList"></div>
+      <button class="menu-btn" id="btnCloseKeyconfig">SAVE & BACK</button>
+    </div>
+  </div>
+
+  <script>
+    // --- Safe Storage Wrapper ---
+    function safeGetStorage(key, fallback) {
+      try {
+        const item = localStorage.getItem(key);
+        if (item === null) return fallback;
+        return JSON.parse(item);
+      } catch (e) {
+        return fallback;
+      }
+    }
+
+    function safeSetStorage(key, value) {
+      try {
+        localStorage.setItem(key, JSON.stringify(value));
+      } catch (e) {}
+    }
+
+    // --- Performance Monitor Vars ---
+    let frameCount = 0;
+    let lastFpsTime = performance.now();
+    let currentFps = 60;
+    let renderCpuTime = 0;
+    let gpsStatus = 'ACTIVE';
+
+    if (navigator.geolocation) {
+      try {
+        navigator.geolocation.watchPosition(
+          pos => { gpsStatus = `±${Math.round(pos.coords.accuracy)}m`; },
+          err => { gpsStatus = 'SIMULATED'; },
+          { enableHighAccuracy: false, timeout: 5000 }
+        );
+      } catch (e) { gpsStatus = 'READY'; }
+    } else {
+      gpsStatus = 'N/A';
+    }
+
+    // --- Background Render Engine ---
+    const bgCanvas = document.getElementById('bgCanvas');
+    const bgCtx = bgCanvas.getContext('2d');
+    function resizeBg() {
+      bgCanvas.width = window.innerWidth;
+      bgCanvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', () => {
+      resizeBg();
+      if (typeof level !== 'undefined') drawMysteryBackground(level);
+    });
+    resizeBg();
+
+    const SPOTS_DATA = [
+      { name: '1. Nazca Lines', type: 'nazca' },
+      { name: '2. Moai Statues', type: 'moai' },
+      { name: '3. Stonehenge', type: 'stonehenge' },
+      { name: '4. Giza Pyramids', type: 'pyramid' },
+      { name: '5. Bermuda Triangle', type: 'bermuda' },
+      { name: '6. Atlantis Ruins', type: 'atlantis' },
+      { name: '7. Chichen Itza', type: 'mayan' },
+      { name: '8. Yellowstone', type: 'geyser' },
+      { name: '9. Uyuni Salt Flat', type: 'uyuni' },
+      { name: '10. Machu Picchu', type: 'machupicchu' },
+      { name: '11. Cappadocia', type: 'cappadocia' },
+      { name: '12. Lascaux Cave', type: 'cave' },
+      { name: '13. Angkor Wat', type: 'angkor' },
+      { name: '14. Parthenon', type: 'parthenon' },
+      { name: '15. Colosseum', type: 'colosseum' },
+      { name: '16. Great Wall', type: 'greatwall' },
+      { name: '17. Petra Ruins', type: 'petra' },
+      { name: '18. Glastonbury', type: 'glastonbury' },
+      { name: '19. Teotihuacan', type: 'teotihuacan' },
+      { name: '20. Aurora Temple', type: 'aurora' }
+    ];
+
+    const PALETTES = [
+      { sky1: '#38bdf8', sky2: '#0284c7', land: '#1e293b', accent: '#fef08a' },
+      { sky1: '#f97316', sky2: '#c2410c', land: '#451a03', accent: '#fde047' },
+      { sky1: '#34d399', sky2: '#059669', land: '#064e3b', accent: '#a7f3d0' },
+      { sky1: '#fb7185', sky2: '#e11d48', land: '#4c0519', accent: '#fecdd3' },
+      { sky1: '#a855f7', sky2: '#6b21a8', land: '#2e1065', accent: '#f0abfc' },
+      { sky1: '#06b6d4', sky2: '#0e7490', land: '#164e63', accent: '#67e8f9' },
+      { sky1: '#f43f5e', sky2: '#be123c', land: '#881337', accent: '#fda4af' },
+      { sky1: '#10b981', sky2: '#047857', land: '#022c22', accent: '#6ee7b7' },
+      { sky1: '#eab308', sky2: '#a16207', land: '#713f12', accent: '#fef08a' },
+      { sky1: '#6366f1', sky2: '#4338ca', land: '#1e1b4b', accent: '#c7d2fe' }
+    ];
+
+    function drawMysteryBackground(lvl) {
+      bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
+      const w = bgCanvas.width;
+      const h = bgCanvas.height;
+
+      const spotIndex = (lvl - 1) % SPOTS_DATA.length;
+      const cycleIndex = Math.floor((lvl - 1) / SPOTS_DATA.length);
+      const spot = SPOTS_DATA[spotIndex];
+      const palette = PALETTES[cycleIndex % PALETTES.length];
+
+      const grad = bgCtx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, palette.sky1);
+      grad.addColorStop(1, palette.sky2);
+      bgCtx.fillStyle = grad;
+      bgCtx.fillRect(0, 0, w, h);
+
+      bgCtx.fillStyle = palette.accent;
+      for (let i = 0; i < 60; i++) {
+        let sx = (i * 97) % w;
+        let sy = (i * 41) % (h * 0.7);
+        bgCtx.fillRect(sx, sy, (i % 3) + 1, (i % 3) + 1);
+      }
+
+      bgCtx.fillStyle = palette.land;
+      bgCtx.strokeStyle = palette.accent;
+      bgCtx.lineWidth = 2;
+
+      if (spot.type === 'nazca') {
+        bgCtx.beginPath();
+        bgCtx.moveTo(0, h); bgCtx.lineTo(0, h * 0.75); bgCtx.lineTo(w, h * 0.75); bgCtx.lineTo(w, h);
+        bgCtx.fill();
+        const cx = w * 0.5, cy = h * 0.45;
+        bgCtx.beginPath();
+        bgCtx.moveTo(cx - 70, cy); bgCtx.lineTo(cx + 70, cy);
+        bgCtx.moveTo(cx, cy - 60); bgCtx.lineTo(cx, cy + 60);
+        bgCtx.stroke();
+      } else if (spot.type === 'moai') {
+        bgCtx.beginPath();
+        bgCtx.moveTo(0, h); bgCtx.lineTo(0, h * 0.8); bgCtx.lineTo(w, h * 0.8); bgCtx.lineTo(w, h);
+        bgCtx.fill();
+        [0.2, 0.4, 0.6, 0.8].forEach(ratio => {
+          let mx = w * ratio;
+          bgCtx.fillRect(mx - 15, h * 0.65, 30, h * 0.15);
+          bgCtx.fillRect(mx - 20, h * 0.62, 40, 15);
+        });
+      } else if (spot.type === 'stonehenge') {
+        bgCtx.beginPath();
+        bgCtx.moveTo(0, h); bgCtx.lineTo(0, h * 0.78); bgCtx.lineTo(w, h * 0.78); bgCtx.lineTo(w, h);
+        bgCtx.fill();
+        for (let x = w * 0.15; x < w * 0.85; x += 50) {
+          bgCtx.fillRect(x, h * 0.63, 14, h * 0.15);
+          bgCtx.fillRect(x + 22, h * 0.63, 14, h * 0.15);
+          bgCtx.fillRect(x - 4, h * 0.60, 44, 10);
+        }
+      } else if (spot.type === 'pyramid') {
+        bgCtx.beginPath();
+        bgCtx.moveTo(0, h);
+        bgCtx.lineTo(w * 0.2, h * 0.4);
+        bgCtx.lineTo(w * 0.5, h * 0.8);
+        bgCtx.lineTo(w * 0.8, h * 0.35);
+        bgCtx.lineTo(w, h * 0.75);
+        bgCtx.lineTo(w, h);
+        bgCtx.fill();
+      } else if (spot.type === 'bermuda') {
+        bgCtx.beginPath();
+        bgCtx.moveTo(0, h); bgCtx.lineTo(0, h * 0.82);
+        for (let x = 0; x < w; x += 30) {
+          bgCtx.lineTo(x, h * 0.82 + Math.sin(x * 0.05) * 8);
+        }
+        bgCtx.lineTo(w, h);
+        bgCtx.fill();
+        bgCtx.beginPath();
+        bgCtx.moveTo(w * 0.5, h * 0.3); bgCtx.lineTo(w * 0.3, h * 0.65); bgCtx.lineTo(w * 0.7, h * 0.65);
+        bgCtx.closePath();
+        bgCtx.stroke();
+      } else if (spot.type === 'atlantis') {
+        for (let x = w * 0.1; x < w; x += 90) {
+          bgCtx.fillRect(x, h * 0.4, 20, h * 0.6);
+          bgCtx.fillRect(x - 10, h * 0.38, 40, 15);
+        }
+      } else if (spot.type === 'mayan' || spot.type === 'teotihuacan') {
+        bgCtx.beginPath();
+        bgCtx.moveTo(w * 0.2, h); bgCtx.lineTo(w * 0.3, h * 0.5); bgCtx.lineTo(w * 0.7, h * 0.5); bgCtx.lineTo(w * 0.8, h);
+        bgCtx.fill();
+        bgCtx.fillRect(w * 0.4, h * 0.4, w * 0.2, h * 0.1);
+      } else if (spot.type === 'geyser') {
+        bgCtx.fillRect(0, h * 0.7, w, h * 0.3);
+        bgCtx.beginPath();
+        bgCtx.arc(w * 0.5, h * 0.7, 80, 0, Math.PI, true);
+        bgCtx.stroke();
+      } else if (spot.type === 'uyuni') {
+        bgCtx.fillRect(0, h * 0.65, w, h * 0.35);
+        bgCtx.beginPath();
+        bgCtx.moveTo(0, h * 0.65); bgCtx.lineTo(w, h * 0.65);
+        bgCtx.stroke();
+      } else if (spot.type === 'cappadocia') {
+        [0.15, 0.45, 0.75].forEach(r => {
+          bgCtx.beginPath();
+          bgCtx.arc(w * r, h * 0.3, 25, 0, Math.PI * 2);
+          bgCtx.fill();
+        });
+      } else {
+        bgCtx.beginPath();
+        bgCtx.moveTo(0, h); bgCtx.lineTo(0, h * 0.75); bgCtx.lineTo(w, h * 0.75); bgCtx.lineTo(w, h);
+        bgCtx.fill();
+      }
+    }
+    drawMysteryBackground(1);
+
+    // --- Audio Engine (Perry & Kingsley Style Classical Pops Ensemble) ---
+    let audioCtx = null;
+    let bgmStep = 0;
+    let bgmTimer = null;
+    const TEMPO_SCALE = 1.35;
+
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+      return audioCtx;
+    }
+
+    function playPSG(freq, duration, type = 'square', gainVal = 0.08) {
+      if (!options.sound || !audioCtx) return;
+      try {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+
+        gain.gain.setValueAtTime(gainVal, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+      } catch (e) {}
+    }
+
+    function playNoise(duration, gainVal = 0.1, type = 'hihat') {
+      if (!options.sound || !audioCtx) return;
+      try {
+        const bufferSize = audioCtx.sampleRate * duration;
+        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = Math.random() * 2 - 1;
+        }
+
+        const noise = audioCtx.createBufferSource();
+        noise.buffer = buffer;
+        const filter = audioCtx.createBiquadFilter();
+        
+        if (type === 'snare') {
+          filter.type = 'bandpass';
+          filter.frequency.value = 1200;
+        } else if (type === 'kick') {
+          filter.type = 'lowpass';
+          filter.frequency.value = 140;
+        } else {
+          filter.type = 'highpass';
+          filter.frequency.value = 6000;
+        }
+
+        const gain = audioCtx.createGain();
+        gain.gain.setValueAtTime(gainVal, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(audioCtx.destination);
+        noise.start();
+      } catch(e) {}
+    }
+
+    const C3=130.81, D3=146.83, E3=164.81, F3=174.61, G3=196.00, A3=220.00, B3=246.94;
+    const C4=261.63, D4=293.66, E4=329.63, F4=349.23, G4=392.00, A4=440.00, B4=493.88;
+    const C5=523.25, D5=587.33, E5=659.25, F5=698.46, G5=783.99, A5=880.00, B5=987.77;
+    const C6=1046.50, D6=1174.66, E6=1318.51, F6=1396.91, G6=1567.98, A6=1760.00, B6=1975.53;
+    const F4S=369.99, G4S=415.30, A4S=466.16, C5S=554.37, F5S=739.99, G5S=830.61, C6S=1108.73;
+
+    const songs = [
+      // 1. Tchaikovsky - Swan Lake Theme [16小節+]
+      [
+        {m:G5,b:C3,p:'k',d:0.4},{m:C6,b:E3,p:'h',d:0.2},{m:E6,b:G3,p:'h',d:0.2},{m:D6,b:A3,p:'s',d:0.4},{m:C6,b:G3,p:'h',d:0.2},{m:B5,b:F3,p:'h',d:0.2},
+        {m:C6,b:E3,p:'k',d:0.4},{m:G5,b:C3,p:'h',d:0.4},{m:E5,b:G3,p:'s',d:0.4},{m:0,b:B3,p:'h',d:0.4},
+        {m:A5,b:F3,p:'k',d:0.4},{m:C6,b:A3,p:'h',d:0.2},{m:F6,b:C4,p:'h',d:0.2},{m:E6,b:G3,p:'s',d:0.4},{m:D6,b:E3,p:'h',d:0.2},{m:C6,b:D3,p:'h',d:0.2},
+        {m:D6,b:G3,p:'k',d:0.4},{m:G5,b:D3,p:'h',d:0.4},{m:B5,b:G3,p:'s',d:0.4},{m:D6,b:B3,p:'h',d:0.4},
+        {m:G5,b:C3,p:'k',d:0.4},{m:C6,b:E3,p:'h',d:0.2},{m:E6,b:G3,p:'h',d:0.2},{m:D6,b:A3,p:'s',d:0.4},{m:C6,b:G3,p:'h',d:0.2},{m:B5,b:F3,p:'h',d:0.2},
+        {m:C6,b:E3,p:'k',d:0.4},{m:E6,b:G3,p:'h',d:0.4},{m:G6,b:C4,p:'s',d:0.8}
+      ],
+      // 2. Tchaikovsky - March from Nutcracker [16小節+]
+      [
+        {m:G5,b:C3,p:'k',d:0.2},{m:E5,b:G3,p:'h',d:0.2},{m:G5,b:C3,p:'s',d:0.2},{m:E5,b:E3,p:'h',d:0.2},{m:G5,b:G3,p:'k',d:0.2},{m:E5,b:B3,p:'h',d:0.2},{m:G5,b:C4,p:'s',d:0.4},
+        {m:A5,b:F3,p:'k',d:0.2},{m:G5,b:E3,p:'h',d:0.2},{m:F5,b:D3,p:'s',d:0.2},{m:E5,b:C3,p:'h',d:0.2},{m:D5,b:G3,p:'k',d:0.4},{m:G4,b:D3,p:'s',d:0.4},
+        {m:C5,b:C3,p:'k',d:0.2},{m:E5,b:E3,p:'h',d:0.2},{m:G5,b:G3,p:'s',d:0.2},{m:C6,b:C4,p:'h',d:0.2},{m:B5,b:G3,p:'k',d:0.4},{m:G5,b:E3,p:'s',d:0.4},
+        {m:A5,b:F3,p:'k',d:0.2},{m:F5,b:C4,p:'h',d:0.2},{m:D5,b:G3,p:'s',d:0.2},{m:B4,b:D3,p:'h',d:0.2},{m:C5,b:C3,p:'k',d:0.8}
+      ],
+      // 3. Rimsky-Korsakov - Flight of the Bumblebee [16小節+]
+      [
+        {m:G5,b:C3,p:'k',d:0.15},{m:F5S,b:E3,p:'h',d:0.15},{m:F5,b:G3,p:'h',d:0.15},{m:E5,b:C4,p:'h',d:0.15},{m:D5,b:G3,p:'s',d:0.15},{m:C5S,b:E3,p:'h',d:0.15},{m:C5,b:C3,p:'h',d:0.15},{m:B4,b:G3,p:'h',d:0.15},
+        {m:C5,b:C3,p:'k',d:0.3},{m:E5,b:G3,p:'h',d:0.3},{m:G5,b:C4,p:'s',d:0.3},{m:C6,b:E4,p:'h',d:0.3},
+        {m:G5,b:C3,p:'k',d:0.15},{m:F5S,b:E3,p:'h',d:0.15},{m:F5,b:G3,p:'h',d:0.15},{m:E5,b:C4,p:'h',d:0.15},{m:D5,b:G3,p:'s',d:0.15},{m:C5S,b:E3,p:'h',d:0.15},{m:C5,b:C3,p:'h',d:0.15},{m:B4,b:G3,p:'h',d:0.15},
+        {m:C5,b:C3,p:'k',d:0.4},{m:G5,b:G3,p:'s',d:0.4},{m:C6,b:C4,p:'k',d:0.8}
+      ],
+      // 4. Mussorgsky - Great Gate of Kiev [16小節+]
+      [
+        {m:C5,b:C3,p:'k',d:0.4},{m:D5,b:E3,p:'h',d:0.2},{m:E5,b:G3,p:'s',d:0.4},{m:G5,b:C4,p:'h',d:0.6},
+        {m:F5,b:F3,p:'k',d:0.4},{m:E5,b:C3,p:'h',d:0.4},{m:D5,b:G3,p:'s',d:0.8},
+        {m:C5,b:C3,p:'k',d:0.4},{m:D5,b:E3,p:'h',d:0.2},{m:E5,b:G3,p:'s',d:0.4},{m:G5,b:C4,p:'h',d:0.6},
+        {m:A5,b:F3,p:'k',d:0.4},{m:G5,b:G3,p:'s',d:0.4},{m:C6,b:C3,p:'k',d:0.8}
+      ],
+      // 5. Tchaikovsky - Waltz of the Flowers [16小節+]
+      [
+        {m:D5,b:D3,p:'k',d:0.4},{m:F5S,b:A3,p:'h',d:0.4},{m:A5,b:D4,p:'s',d:0.4},
+        {m:D6,b:F3,p:'k',d:0.6},{m:C6S,b:A3,p:'h',d:0.3},{m:B5,b:D4,p:'s',d:0.3},
+        {m:A5,b:D3,p:'k',d:0.4},{m:F5S,b:F3,p:'h',d:0.4},{m:D5,b:A3,p:'s',d:0.4},
+        {m:E5,b:A3,p:'k',d:0.6},{m:A5,b:C4,p:'s',d:0.6}
+      ],
+      // 6. Prokofiev - Peter and the Wolf [16小節+]
+      [
+        {m:C5,b:C3,p:'k',d:0.3},{m:E5,b:G3,p:'h',d:0.3},{m:G5,b:C4,p:'s',d:0.3},{m:C6,b:E4,p:'h',d:0.3},
+        {m:B5,b:G3,p:'k',d:0.3},{m:A5,b:F3,p:'h',d:0.3},{m:G5,b:C3,p:'s',d:0.6},
+        {m:F5,b:F3,p:'k',d:0.3},{m:A5,b:C4,p:'h',d:0.3},{m:D5,b:G3,p:'s',d:0.3},{m:F5,b:B3,p:'h',d:0.3},
+        {m:E5,b:C3,p:'k',d:0.6},{m:C5,b:G3,p:'s',d:0.6}
+      ],
+      // 7. Khachaturian - Sabre Dance [16小節+]
+      [
+        {m:G5,b:G3,p:'k',d:0.15},{m:G5,b:D3,p:'h',d:0.15},{m:A5,b:G3,p:'s',d:0.15},{m:G5,b:B3,p:'h',d:0.15},{m:G5,b:D4,p:'k',d:0.15},{m:G5,b:B3,p:'h',d:0.15},{m:A5,b:G3,p:'s',d:0.15},{m:G5,b:D3,p:'h',d:0.15},
+        {m:C6,b:C3,p:'k',d:0.3},{m:B5,b:E3,p:'h',d:0.3},{m:A5,b:G3,p:'s',d:0.3},{m:G5,b:C4,p:'h',d:0.3},
+        {m:F5,b:F3,p:'k',d:0.3},{m:E5,b:C3,p:'s',d:0.3},{m:D5,b:G3,p:'k',d:0.6}
+      ],
+      // 8. Shostakovich - Waltz No.2 [16小節+]
+      [
+        {m:E5,b:C3,p:'k',d:0.6},{m:G5,b:E3,p:'h',d:0.3},{m:C6,b:G3,p:'s',d:0.3},
+        {m:B5,b:G3,p:'k',d:0.6},{m:G5,b:D3,p:'h',d:0.3},{m:D5,b:B3,p:'s',d:0.3},
+        {m:C5,b:C3,p:'k',d:0.6},{m:E5,b:G3,p:'h',d:0.3},{m:A5,b:F3,p:'s',d:0.3},
+        {m:G5,b:C3,p:'k',d:0.8},{m:0,b:0,p:'h',d:0.4}
+      ],
+      // 9. Borodin - Polovtsian Dances [16小節+]
+      [
+        {m:A5,b:F3,p:'k',d:0.6},{m:G5,b:C3,p:'h',d:0.3},{m:E5,b:G3,p:'s',d:0.3},{m:C5,b:C3,p:'k',d:0.6},{m:D5,b:G3,p:'h',d:0.6},
+        {m:E5,b:C3,p:'k',d:0.4},{m:G5,b:E3,p:'h',d:0.4},{m:A5,b:F3,p:'s',d:0.8},
+        {m:C6,b:C3,p:'k',d:0.6},{m:A5,b:F3,p:'h',d:0.3},{m:G5,b:G3,p:'s',d:0.3},{m:E5,b:C3,p:'k',d:0.8}
+      ],
+      // 10. Rachmaninoff - Piano Concerto No.2 Theme [16小節+]
+      [
+        {m:G5,b:C3,p:'k',d:0.6},{m:A5,b:E3,p:'h',d:0.3},{m:B5,b:G3,p:'s',d:0.3},{m:C6,b:C4,p:'k',d:0.8},
+        {m:D6,b:G3,p:'k',d:0.6},{m:C6,b:E3,p:'h',d:0.3},{m:B5,b:C3,p:'s',d:0.3},{m:A5,b:F3,p:'k',d:0.8},
+        {m:G5,b:C3,p:'k',d:0.4},{m:C6,b:G3,p:'h',d:0.4},{m:E6,b:C4,p:'s',d:0.8}
+      ]
+    ];
+
+    function getCurrentSongIndex() {
+      return (level - 1) % songs.length;
+    }
+
+    function startBGM() {
+      stopBGM();
+      if (!options.music) return;
+      if (!initAudio()) return;
+      bgmStep = 0;
+
+      const playNextNote = () => {
+        if (!options.music || isPaused || isGameOver || !gameStarted) return;
+        const songIdx = getCurrentSongIndex();
+        const currentMelody = songs[songIdx];
+        const note = currentMelody[bgmStep];
+        const scaledDuration = (note.d / TEMPO_SCALE);
+
+        if (audioCtx) {
+          try {
+            if (note.m > 0) {
+              const oscM = audioCtx.createOscillator();
+              const gainM = audioCtx.createGain();
+              oscM.type = 'square';
+              oscM.frequency.setValueAtTime(note.m, audioCtx.currentTime);
+              gainM.gain.setValueAtTime(0.04, audioCtx.currentTime);
+              gainM.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + scaledDuration * 0.85);
+              oscM.connect(gainM);
+              gainM.connect(audioCtx.destination);
+              oscM.start();
+              oscM.stop(audioCtx.currentTime + scaledDuration * 0.85);
+            }
+
+            if (note.b > 0) {
+              const oscB = audioCtx.createOscillator();
+              const gainB = audioCtx.createGain();
+              oscB.type = 'triangle';
+              oscB.frequency.setValueAtTime(note.b, audioCtx.currentTime);
+              gainB.gain.setValueAtTime(0.07, audioCtx.currentTime);
+              gainB.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + scaledDuration * 0.9);
+              oscB.connect(gainB);
+              gainB.connect(audioCtx.destination);
+              oscB.start();
+              oscB.stop(audioCtx.currentTime + scaledDuration * 0.9);
+            }
+
+            if (note.p === 'k') playNoise(0.08, 0.12, 'kick');
+            else if (note.p === 's') playNoise(0.06, 0.08, 'snare');
+            else if (note.p === 'h') playNoise(0.03, 0.04, 'hihat');
+
+          } catch(e) {}
+        }
+
+        bgmStep++;
+        if (bgmStep >= currentMelody.length) {
+          bgmStep = 0;
+        }
+        bgmTimer = setTimeout(playNextNote, scaledDuration * 1000);
+      };
+      playNextNote();
+    }
+
+    function stopBGM() {
+      if (bgmTimer) {
+        clearTimeout(bgmTimer);
+        bgmTimer = null;
+      }
+    }
+
+    const SFX = {
+      move: () => playPSG(220, 0.04, 'square', 0.04),
+      rotate: () => playPSG(440, 0.06, 'triangle', 0.06),
+      drop: () => { playPSG(110, 0.08, 'sawtooth', 0.08); playNoise(0.05, 0.08); },
+      clear: (lines, isAllClear) => {
+        if (isAllClear) {
+          [300, 500, 700, 1000, 1400].forEach((f, idx) => {
+            setTimeout(() => playPSG(f, 0.25, 'sawtooth', 0.15), idx * 60);
+          });
+          playNoise(0.5, 0.3);
+        } else if (lines >= 4) {
+          [523.25, 659.25, 783.99, 1046.5].forEach((f, idx) => {
+            setTimeout(() => playPSG(f, 0.15, 'square', 0.1), idx * 80);
+          });
+          playNoise(0.2, 0.15);
+        } else {
+          playPSG(600, 0.1, 'square', 0.08);
+          setTimeout(() => playPSG(800, 0.12, 'square', 0.08), 60);
+          playNoise(0.15, 0.1);
+        }
+      },
+      levelUp: () => {
+        [440, 554.37, 659.25, 880].forEach((n, idx) => {
+          setTimeout(() => playPSG(n, 0.1, 'square', 0.12), idx * 70);
+        });
+      },
+      gameover: () => {
+        stopBGM();
+        [400, 350, 300, 200].forEach((n, idx) => {
+          setTimeout(() => playPSG(n, 0.2, 'sawtooth', 0.12), idx * 120);
+        });
+      }
+    };
+
+    // --- Core Game Settings (4 LINES Dedicated) ---
+    const COLS = 4;
+    const ROWS = 20;
+    const BLOCK_SIZE = 28;
+
+    const SHAPES = {
+      I: [[0,0,0,0], [1,1,1,1], [0,0,0,0], [0,0,0,0]],
+      J: [[1,0,0], [1,1,1], [0,0,0]],
+      L: [[0,0,1], [1,1,1], [0,0,0]],
+      O: [[1,1], [1,1]],
+      S: [[0,1,1], [1,1,0], [0,0,0]],
+      T: [[0,1,0], [1,1,1], [0,0,0]],
+      Z: [[1,1,0], [0,1,1], [0,0,0]]
+    };
+
+    const COLORS = {
+      I: '#06b6d4', J: '#3b82f6', L: '#f97316',
+      O: '#eab308', S: '#22c55e', T: '#a855f7', Z: '#ef4444'
+    };
+
+    const KICK_TABLE_JLSTZ = [
+      [[0,0], [-1,0], [-1,1], [0,-2], [-1,-2]],
+      [[0,0], [1,0], [1,-1], [0,2], [1,2]],
+      [[0,0], [1,0], [1,1], [0,-2], [1,-2]],
+      [[0,0], [-1,0], [-1,-1], [0,2], [-1,2]]
+    ];
+
+    let gamepadMapping = safeGetStorage('combotime_gamepad_config', {
+      left: 14, right: 15, softDrop: 13, hardDrop: 12,
+      rotCW: 1, rotCCW: 0, hold: 5, pause: 9
+    });
+
+    let highScores = safeGetStorage('combotime_arcade_scores', [
+      { name: 'CMB', score: 50000, level: 'NA', maxCombo: 'NA' },
+      { name: 'TIM', score: 30000, level: 'NA', maxCombo: 'NA' },
+      { name: 'CPU', score: 15000, level: 'NA', maxCombo: 'NA' },
+      { name: 'AAA', score: 8000, level: 'NA', maxCombo: 'NA' },
+      { name: 'BBB', score: 3000, level: 'NA', maxCombo: 'NA' }
+    ]);
+
+    const options = {
+      sound: true,
+      music: true,
+      perf: true,
+      touchControls: true,
+      showNext: true,
+      enableHold: true,
+      enableCombo: true,
+      showGhost: true,
+      enableEffects: true
+    };
+
+    const boardCanvas = document.getElementById('board');
+    const ctx = boardCanvas.getContext('2d');
+    const holdCtx = document.getElementById('holdCanvas').getContext('2d');
+    const nextCtx = document.getElementById('nextCanvas').getContext('2d');
+    const boardWrapper = document.getElementById('boardWrapper');
+
+    let grid = Array(ROWS).fill(null).map(() => Array(COLS).fill(0));
+    let score = 0;
+    let lines = 0;
+    let level = 1;
+
+    let combo = 0;
+    let maxCombo = 0;
+    let isBonusActive = false;
+
+    let isPaused = false;
+    let isGameOver = false;
+    let gameStarted = false;
+
+    let piece = null;
+    let nextPiece = null;
+    let holdPiece = null;
+    let canHold = true;
+
+    let piecePixelY = 0;
+    let lockTimer = 0;
+    const LOCK_DELAY = 1.0;
+
+    let lastTime = 0;
+    let dropInterval = 1000;
+
+    let particles = [];
+    let comboTexts = [];
+    let shakeTimer = 0;
+    let shakeIntensity = 0;
+    let isSoftDropping = false;
+
+    let lastStepSubtotal = 0;
+    let lastComboCalcText = '-';
+
+    let initials = ['A', 'A', 'A'];
+    let initialIndex = 0;
+
+    let testScoreHistory = [];
+    let replayBoardHistory = [];
+    let replayAnimationFrame = null;
+
+    let allClearAnim = null;
+
+    const keyState = {};
+    const gamepadButtonState = {};
+
+    function updateBoardDimensions() {
+      boardCanvas.width = COLS * BLOCK_SIZE;
+      boardCanvas.height = ROWS * BLOCK_SIZE;
+      boardWrapper.style.width = boardCanvas.width + 'px';
+      boardWrapper.style.height = boardCanvas.height + 'px';
+
+      const microCanvas = document.getElementById('microReplayCanvas');
+      if (microCanvas) {
+        microCanvas.width = COLS;
+        microCanvas.height = ROWS;
+      }
+    }
+
+    class Piece {
+      constructor(type) {
+        this.type = type;
+        this.matrix = SHAPES[type].map(row => [...row]);
+        this.color = COLORS[type];
+        this.x = Math.floor((COLS - this.matrix[0].length) / 2);
+        this.gridY = 0;
+        this.rotationState = 0;
+      }
+    }
+
+    function getRandomPiece() {
+      const pieces = 'IJLOSTZ';
+      return new Piece(pieces[Math.floor(Math.random() * pieces.length)]);
+    }
+
+    function collide(grid, p, offsetX = 0, offsetY = 0, customMatrix = null) {
+      const m = customMatrix || p.matrix;
+      const targetX = p.x + offsetX;
+      const targetY = p.gridY + offsetY;
+
+      for (let y = 0; y < m.length; y++) {
+        for (let x = 0; x < m[y].length; x++) {
+          if (m[y][x] !== 0) {
+            let newX = targetX + x;
+            let newY = targetY + y;
+            if (newX < 0 || newX >= COLS || newY >= ROWS) return true;
+            if (newY >= 0 && grid[newY][newX] !== 0) return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    function rotateMatrix(matrix, dir) {
+      const result = matrix.map((_, index) => matrix.map(col => col[index]));
+      if (dir > 0) return result.map(row => row.reverse());
+      return result.reverse();
+    }
+
+    function rotatePiece(dir) {
+      const newMatrix = rotateMatrix(piece.matrix, dir);
+      const oldRotation = piece.rotationState;
+      const newRotation = (oldRotation + dir + 4) % 4;
+      const kicks = KICK_TABLE_JLSTZ[oldRotation];
+
+      for (let i = 0; i < kicks.length; i++) {
+        const [dx, dy] = kicks[i];
+        if (!collide(grid, piece, dx, -dy, newMatrix)) {
+          piece.x += dx;
+          piece.gridY -= dy;
+          piece.matrix = newMatrix;
+          piece.rotationState = newRotation;
+          
+          if (collide(grid, piece, 0, 1)) {
+            piecePixelY = piece.gridY * BLOCK_SIZE;
+          }
+          
+          SFX.rotate();
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function updateDifficultySettings() {
+      const speeds = [
+        1000, 850, 700, 550, 400, 300, 200, 120, 80,
+        900, 750, 600, 450, 320, 220, 140, 90, 60, 40, 30
+      ];
+      const idx = Math.min(level - 1, speeds.length - 1);
+      dropInterval = speeds[idx];
+    }
+
+    function recordBoardSnapshot() {
+      const snapshot = grid.map(row => [...row]);
+      replayBoardHistory.push(snapshot);
+    }
+
+    function resetGame() {
+      grid = Array(ROWS).fill(null).map(() => Array(COLS).fill(0));
+      score = 0;
+      lines = 0;
+      level = 1;
+      combo = 0;
+      maxCombo = 0;
+      isBonusActive = false;
+      lastStepSubtotal = 0;
+      lastComboCalcText = '-';
+      isGameOver = false;
+      isPaused = false;
+      holdPiece = null;
+      canHold = true;
+      particles = [];
+      comboTexts = [];
+      allClearAnim = null;
+      isSoftDropping = false;
+
+      if (replayAnimationFrame) {
+        cancelAnimationFrame(replayAnimationFrame);
+        replayAnimationFrame = null;
+      }
+
+      testScoreHistory = [{ dropCount: 0, score: 0, level: 1, combo: 0 }];
+      replayBoardHistory = [];
+      recordBoardSnapshot();
+
+      updateBoardDimensions();
+      piece = getRandomPiece();
+      nextPiece = getRandomPiece();
+      piecePixelY = 0;
+      lockTimer = 0;
+
+      updateDifficultySettings();
+      updateUI();
+      hideModals();
+      drawMysteryBackground(level);
+      startBGM();
+    }
+
+    function startGame() {
+      try { initAudio(); } catch (e) { audioCtx = null; }
+      if (gameStarted) return;
+      gameStarted = true;
+      document.getElementById('arcadeTitleScreen').classList.add('hidden');
+      resetGame();
+    }
+
+    function returnToTitle() {
+      stopBGM();
+      if (replayAnimationFrame) {
+        cancelAnimationFrame(replayAnimationFrame);
+        replayAnimationFrame = null;
+      }
+      isPaused = false;
+      isGameOver = false;
+      gameStarted = false;
+      hideModals();
+      document.getElementById('initialInputScreen').classList.add('hidden');
+      document.getElementById('arcadeTitleScreen').classList.remove('hidden');
+      renderRankingList();
+    }
+
+    function moveLeft() {
+      if (!collide(grid, piece, -1, 0)) {
+        piece.x--;
+        if (collide(grid, piece, 0, 1)) lockTimer = 0;
+        SFX.move();
+      }
+    }
+
+    function moveRight() {
+      if (!collide(grid, piece, 1, 0)) {
+        piece.x++;
+        if (collide(grid, piece, 0, 1)) lockTimer = 0;
+        SFX.move();
+      }
+    }
+
+    function hardDrop() {
+      while (!collide(grid, piece, 0, 1)) {
+        piece.gridY++;
+        score += 2;
+      }
+      piecePixelY = piece.gridY * BLOCK_SIZE;
+      SFX.drop();
+      lockPiece();
+    }
+
+    function hold() {
+      if (!options.enableHold || !canHold) return;
+      if (holdPiece === null) {
+        holdPiece = new Piece(piece.type);
+        piece = nextPiece;
+        nextPiece = getRandomPiece();
+      } else {
+        const temp = piece.type;
+        piece = new Piece(holdPiece.type);
+        holdPiece = new Piece(temp);
+      }
+      piecePixelY = 0;
+      lockTimer = 0;
+      canHold = false;
+      SFX.rotate();
+    }
+
+    function lockPiece() {
+      piece.matrix.forEach((row, y) => {
+        row.forEach((value, x) => {
+          if (value !== 0) {
+            grid[piece.gridY + y][piece.x + x] = piece.color;
+          }
+        });
+      });
+
+      clearLines();
+
+      testScoreHistory.push({ dropCount: lines, score: score, level: level, combo: combo });
+      recordBoardSnapshot();
+
+      spawnNext();
+    }
+
+    function spawnNext() {
+      piece = nextPiece;
+      nextPiece = getRandomPiece();
+      piecePixelY = 0;
+      lockTimer = 0;
+      canHold = true;
+
+      if (collide(grid, piece, 0, 0)) {
+        triggerGameOver();
+      }
+    }
+
+    function triggerGameOver() {
+      isGameOver = true;
+      SFX.gameover();
+      triggerShake(15);
+
+      let lowestScore = 0;
+      try {
+        if (highScores && highScores.length > 0) {
+          lowestScore = highScores[highScores.length - 1].score;
+        }
+      } catch (e) {
+        highScores = [{ name: 'CMB', score: 50000, level: 'NA', maxCombo: 'NA' }];
+        lowestScore = 50000;
+      }
+
+      const isHighScore = score > lowestScore;
+      const initialScreen = document.getElementById('initialInputScreen');
+      initialScreen.classList.remove('hidden');
+      initialScreen.classList.add('active');
+
+      document.getElementById('finalScoreText').innerText = 'SCORE: ' + score;
+
+      startReplayAndGraphSync();
+
+      if (isHighScore) {
+        document.getElementById('initialEntryContainer').classList.remove('hidden');
+        document.getElementById('backToTitleContainer').classList.add('hidden');
+        initials = ['A', 'A', 'A'];
+        initialIndex = 0;
+        updateInitialDisplay();
+      } else {
+        document.getElementById('initialEntryContainer').classList.add('hidden');
+        document.getElementById('backToTitleContainer').classList.remove('hidden');
+      }
+    }
+
+    function startReplayAndGraphSync() {
+      if (replayAnimationFrame) {
+        cancelAnimationFrame(replayAnimationFrame);
+        replayAnimationFrame = null;
+      }
+
+      const graphCanvas = document.getElementById('testScoreGraphCanvas');
+      const replayCanvas = document.getElementById('microReplayCanvas');
+      if (!graphCanvas || !replayCanvas) return;
+
+      const gCtx = graphCanvas.getContext('2d');
+      const rCtx = replayCanvas.getContext('2d');
+      const traceScoreEl = document.getElementById('traceScoreDisplay');
+      const traceComboEl = document.getElementById('traceComboDisplay');
+
+      let frameIndex = 0;
+      const totalFrames = replayBoardHistory.length;
+      if (totalFrames === 0) return;
+
+      let lastAnimTime = performance.now();
+
+      function stepReplay(now) {
+        if (now - lastAnimTime > 30) {
+          lastAnimTime = now;
+          frameIndex = (frameIndex + 1) % totalFrames;
+        }
+
+        const currentData = testScoreHistory[frameIndex] || { score: 0, combo: 0, dropCount: 0, level: 1 };
+        if (traceScoreEl) traceScoreEl.innerText = currentData.score;
+        if (traceComboEl) traceComboEl.innerText = currentData.combo;
+
+        gCtx.clearRect(0, 0, graphCanvas.width, graphCanvas.height);
+
+        let maxHs = highScores && highScores.length > 0 ? highScores[0].score : 50000;
+        let targetScale = Math.max(maxHs, score, 1000);
+        let maxDrop = Math.max(testScoreHistory[testScoreHistory.length - 1].dropCount || 1, 1);
+        let maxComboVal = Math.max(...testScoreHistory.map(d => d.combo || 0), 5);
+
+        gCtx.strokeStyle = 'rgba(255,255,255,0.08)';
+        gCtx.lineWidth = 1;
+        for (let i = 0; i <= 3; i++) {
+          let y = (graphCanvas.height / 3) * i;
+          gCtx.beginPath();
+          gCtx.moveTo(0, y);
+          gCtx.lineTo(graphCanvas.width, y);
+          gCtx.stroke();
+        }
+
+        if (testScoreHistory.length > 1) {
+          const barWidth = Math.max(1, (graphCanvas.width - 20) / testScoreHistory.length);
+          for (let i = 0; i < testScoreHistory.length; i++) {
+            let item = testScoreHistory[i];
+            let x = (item.dropCount / maxDrop) * (graphCanvas.width - 20) + 10;
+            let comboH = ((item.combo || 0) / maxComboVal) * 25;
+            gCtx.fillStyle = 'rgba(245, 158, 11, 0.4)';
+            gCtx.fillRect(x - barWidth / 2, graphCanvas.height - comboH, barWidth, comboH);
+          }
+        }
+
+        if (testScoreHistory.length > 1) {
+          for (let i = 0; i < testScoreHistory.length - 1; i++) {
+            let p1 = testScoreHistory[i];
+            let p2 = testScoreHistory[i + 1];
+
+            let x1 = (p1.dropCount / maxDrop) * (graphCanvas.width - 20) + 10;
+            let y1 = graphCanvas.height - (p1.score / targetScale) * (graphCanvas.height - 20) - 5;
+            let x2 = (p2.dropCount / maxDrop) * (graphCanvas.width - 20) + 10;
+            let y2 = graphCanvas.height - (p2.score / targetScale) * (graphCanvas.height - 20) - 5;
+
+            gCtx.beginPath();
+            gCtx.moveTo(x1, y1);
+            gCtx.lineTo(x2, y2);
+
+            const lvlColors = ['#38bdf8', '#34d399', '#f59e0b', '#f43f5e', '#a855f7', '#06b6d4'];
+            gCtx.strokeStyle = lvlColors[(p2.level - 1) % lvlColors.length];
+            gCtx.lineWidth = 2;
+            gCtx.stroke();
+          }
+        }
+
+        let curX = (currentData.dropCount / maxDrop) * (graphCanvas.width - 20) + 10;
+        let curY = graphCanvas.height - (currentData.score / targetScale) * (graphCanvas.height - 20) - 5;
+
+        gCtx.strokeStyle = '#f59e0b';
+        gCtx.lineWidth = 1.5;
+        gCtx.beginPath();
+        gCtx.moveTo(curX, 0);
+        gCtx.lineTo(curX, graphCanvas.height);
+        gCtx.stroke();
+
+        gCtx.fillStyle = '#ffffff';
+        gCtx.beginPath();
+        gCtx.arc(curX, curY, 3, 0, Math.PI * 2);
+        gCtx.fill();
+
+        rCtx.clearRect(0, 0, replayCanvas.width, replayCanvas.height);
+        const boardState = replayBoardHistory[frameIndex];
+        if (boardState) {
+          for (let r = 0; r < ROWS; r++) {
+            for (let c = 0; c < COLS; c++) {
+              if (boardState[r][c] !== 0) {
+                rCtx.fillStyle = boardState[r][c];
+                rCtx.fillRect(c, r, 1, 1);
+              }
+            }
+          }
+        }
+
+        replayAnimationFrame = requestAnimationFrame(stepReplay);
+      }
+
+      replayAnimationFrame = requestAnimationFrame(stepReplay);
+    }
+
+    function clearLines() {
+      let linesCleared = 0;
+      let clearedRows = [];
+
+      for (let y = ROWS - 1; y >= 0; y--) {
+        let isLineFull = true;
+        for (let x = 0; x < COLS; x++) {
+          if (grid[y][x] === 0) {
+            isLineFull = false;
+            break;
+          }
+        }
+        if (isLineFull) {
+          clearedRows.push(y);
+          grid.splice(y, 1);
+          grid.unshift(Array(COLS).fill(0));
+          linesCleared++;
+          y++;
+        }
+      }
+
+      if (linesCleared > 0) {
+        lines += linesCleared;
+        
+        if (options.enableCombo) {
+          combo++;
+          if (combo > maxCombo) maxCombo = combo;
+        }
+
+        const baseLinePoints = [0, 100, 300, 500, 800];
+        let earnedPoints = baseLinePoints[linesCleared] * level;
+        let currentComboCount = options.enableCombo ? combo : 1;
+        let bonusPoints = options.enableCombo && currentComboCount > 1 ? (currentComboCount - 1) * 50 : 0;
+        
+        let stepPoints = earnedPoints + bonusPoints;
+        let finalStepScore = stepPoints * currentComboCount * level;
+
+        let isAllClear = true;
+        for (let r = 0; r < ROWS; r++) {
+          for (let c = 0; c < COLS; c++) {
+            if (grid[r][c] !== 0) {
+              isAllClear = false;
+              break;
+            }
+          }
+          if (!isAllClear) break;
+        }
+
+        if (isAllClear) {
+          finalStepScore *= 15;
+          isBonusActive = true;
+          triggerAllClearEffect();
+        } else if (isBonusActive) {
+          isBonusActive = false;
+        }
+
+        score += finalStepScore;
+        lastStepSubtotal = finalStepScore;
+        lastComboCalcText = `${linesCleared}L × C${currentComboCount} × L${level}` + (isAllClear ? ' [ALL CLEAR!]' : '');
+
+        const oldLevel = level;
+        level = Math.floor(lines / 10) + 1;
+        updateDifficultySettings();
+
+        if (level > oldLevel) {
+          SFX.levelUp();
+          drawMysteryBackground(level);
+          startBGM();
+        } else {
+          SFX.clear(linesCleared, isAllClear);
+        }
+
+        if (options.enableEffects) {
+          triggerShake(linesCleared * 3 + (currentComboCount > 0 ? currentComboCount * 3 : 0) + (isAllClear ? 20 : 0));
+          spawnParticles(clearedRows, currentComboCount, isAllClear);
+          spawnComboText(clearedRows, currentComboCount);
+        }
+      } else {
+        if (!isBonusActive) {
+          combo = 0;
+        }
+      }
+      updateUI();
+    }
+
+    function triggerAllClearEffect() {
+      allClearAnim = {
+        y: -30,
+        vy: 0,
+        gravity: 1400,
+        bounced: false,
+        targetY: (ROWS * BLOCK_SIZE) - BLOCK_SIZE,
+        scale: 1.0,
+        maxScale: 2.2,
+        hueOffset: 0,
+        life: 2.5
+      };
+    }
+
+    function triggerShake(intensity) {
+      shakeIntensity = intensity;
+      shakeTimer = 0.3;
+    }
+
+    function spawnParticles(clearedRows, comboCount, isAllClear) {
+      const comboMultiplier = 1 + Math.max(0, comboCount) * 0.3;
+
+      clearedRows.forEach(rowY => {
+        for (let x = 0; x < COLS; x++) {
+          const blockCenterX = x * BLOCK_SIZE + BLOCK_SIZE / 2;
+          const blockCenterY = rowY * BLOCK_SIZE + BLOCK_SIZE / 2;
+          const count = isAllClear ? 15 : 6;
+
+          for (let i = 0; i < count; i++) {
+            particles.push({
+              x: blockCenterX,
+              y: blockCenterY,
+              vx: (Math.random() - 0.5) * (8 + Math.max(0, comboCount) * 2),
+              vy: (Math.random() - 0.5) * (8 + Math.max(0, comboCount) * 2),
+              color: isAllClear ? '#fcd34d' : `hsl(${Math.random() * 360}, 100%, 60%)`,
+              size: (Math.random() * 5 + 2) * comboMultiplier,
+              alpha: 1.0,
+              life: Math.random() * 0.6 + 0.3
+            });
+          }
+        }
+      });
+    }
+
+    function spawnComboText(clearedRows, comboCount) {
+      if (comboCount <= 0) return;
+      let avgY = clearedRows.reduce((a, b) => a + b, 0) / clearedRows.length;
+      let pixelX = (COLS * BLOCK_SIZE) / 2;
+      let pixelY = avgY * BLOCK_SIZE + BLOCK_SIZE / 2;
+
+      comboTexts.push({
+        text: `${comboCount}`,
+        x: pixelX,
+        y: pixelY,
+        alpha: 1.0,
+        scale: 1.6,
+        life: 0.8
+      });
+    }
+
+    function updateParticles(dt) {
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.alpha -= dt / p.life;
+        if (p.alpha <= 0) particles.splice(i, 1);
+      }
+
+      for (let i = comboTexts.length - 1; i >= 0; i--) {
+        const ct = comboTexts[i];
+        ct.y -= 15 * dt;
+        ct.alpha -= dt / ct.life;
+        ct.scale += 0.4 * dt;
+        if (ct.alpha <= 0) comboTexts.splice(i, 1);
+      }
+
+      if (allClearAnim) {
+        allClearAnim.hueOffset = (allClearAnim.hueOffset + dt * 240) % 360;
+        allClearAnim.life -= dt;
+
+        if (!allClearAnim.bounced) {
+          allClearAnim.vy += allClearAnim.gravity * dt;
+          allClearAnim.y += allClearAnim.vy * dt;
+
+          if (allClearAnim.y >= allClearAnim.targetY) {
+            allClearAnim.y = allClearAnim.targetY;
+            allClearAnim.bounced = true;
+          }
+        } else {
+          if (allClearAnim.scale < allClearAnim.maxScale) {
+            allClearAnim.scale += 4.0 * dt;
+          }
+        }
+
+        if (allClearAnim.life <= 0) {
+          allClearAnim = null;
+        }
+      }
+    }
+
+    function drawParticles() {
+      particles.forEach(p => {
+        ctx.save();
+        ctx.globalAlpha = p.alpha;
+        ctx.fillStyle = p.color;
+        ctx.fillRect(p.x, p.y, p.size, p.size);
+        ctx.restore();
+      });
+
+      comboTexts.forEach(ct => {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, ct.alpha);
+        ctx.font = `900 ${Math.floor(28 * ct.scale)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#f59e0b';
+        ctx.shadowColor = '#38bdf8';
+        ctx.shadowBlur = 12;
+        ctx.fillText(ct.text, ct.x, ct.y);
+        ctx.restore();
+      });
+
+      if (allClearAnim) {
+        ctx.save();
+        const baseFontSize = 14;
+        const fontPx = Math.floor(baseFontSize * allClearAnim.scale);
+        ctx.font = `900 ${fontPx}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        const textStr = 'ALL CLEAR!';
+        const totalWidth = textStr.length * (fontPx * 0.65);
+        const startX = (COLS * BLOCK_SIZE) / 2 - totalWidth / 2 + (fontPx * 0.32);
+
+        for (let i = 0; i < textStr.length; i++) {
+          const char = textStr[i];
+          const charX = startX + i * (fontPx * 0.65);
+          const charHue = (allClearAnim.hueOffset + i * 35) % 360;
+
+          ctx.fillStyle = `hsl(${charHue}, 100%, 65%)`;
+          ctx.shadowColor = `hsl(${charHue}, 100%, 50%)`;
+          ctx.shadowBlur = 12;
+          ctx.fillText(char, charX, allClearAnim.y);
+        }
+        ctx.restore();
+      }
+    }
+
+    function drawBlock(context, x, yPx, color, isGhost = false) {
+      context.fillStyle = color;
+      if (isGhost) {
+        context.globalAlpha = 0.25;
+        context.fillRect(x * BLOCK_SIZE, yPx, BLOCK_SIZE - 1, BLOCK_SIZE - 1);
+        context.globalAlpha = 1.0;
+      } else {
+        context.fillRect(x * BLOCK_SIZE, yPx, BLOCK_SIZE - 1, BLOCK_SIZE - 1);
+        context.fillStyle = 'rgba(255, 255, 255, 0.25)';
+        context.fillRect(x * BLOCK_SIZE, yPx, BLOCK_SIZE - 1, 3);
+      }
+    }
+
+    function drawGrid() {
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+      for (let x = 0; x < COLS; x++) {
+        for (let y = 0; y < ROWS; y++) {
+          ctx.strokeRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+        }
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, boardCanvas.width, boardCanvas.height);
+      drawGrid();
+
+      grid.forEach((row, y) => {
+        row.forEach((color, x) => {
+          if (color !== 0) drawBlock(ctx, x, y * BLOCK_SIZE, color);
+        });
+      });
+
+      if (gameStarted && !isGameOver && piece) {
+        if (options.showGhost) {
+          let ghostY = piece.gridY;
+          while (!collide(grid, piece, 0, ghostY - piece.gridY + 1)) {
+            ghostY++;
+          }
+          piece.matrix.forEach((row, y) => {
+            row.forEach((val, x) => {
+              if (val !== 0) drawBlock(ctx, piece.x + x, (ghostY + y) * BLOCK_SIZE, piece.color, true);
+            });
+          });
+        }
+
+        piece.matrix.forEach((row, y) => {
+          row.forEach((val, x) => {
+            if (val !== 0) drawBlock(ctx, piece.x + x, piecePixelY + y * BLOCK_SIZE, piece.color);
+          });
+        });
+      }
+
+      drawParticles();
+      drawPreview(holdCtx, options.enableHold ? holdPiece : null);
+      drawPreview(nextCtx, options.showNext ? nextPiece : null);
+
+      if (isGameOver) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(0, 0, boardCanvas.width, boardCanvas.height);
+      }
+    }
+
+    function drawPreview(context, p) {
+      context.clearRect(0, 0, 80, 80);
+      if (!p) return;
+      const size = 16;
+      const offsetX = (80 - p.matrix[0].length * size) / 2;
+      const offsetY = (80 - p.matrix.length * size) / 2;
+
+      p.matrix.forEach((row, y) => {
+        row.forEach((val, x) => {
+          if (val !== 0) {
+            context.fillStyle = p.color;
+            context.fillRect(offsetX + x * size, offsetY + y * size, size - 1, size - 1);
+          }
+        });
+      });
+    }
+
+    function updateUI() {
+      document.getElementById('scoreDisplay').innerText = score;
+      document.getElementById('linesDisplay').innerText = lines;
+      document.getElementById('levelDisplay').innerText = level;
+      document.getElementById('comboDisplay').innerText = combo;
+
+      document.getElementById('subtotalDisplay').innerText = lastStepSubtotal + ' PTS';
+      document.getElementById('comboCalcDisplay').innerText = lastComboCalcText;
+
+      document.getElementById('perfMonitor').classList.toggle('hidden', !options.perf);
+      document.getElementById('holdContainer').classList.toggle('hidden', !options.enableHold);
+      document.getElementById('nextContainer').classList.toggle('hidden', !options.showNext);
+      document.getElementById('comboContainer').classList.toggle('hidden', !options.enableCombo);
+      document.getElementById('virtualControls').classList.toggle('hidden', !options.touchControls);
+    }
+
+    function renderRankingList() {
+      const listEl = document.getElementById('titleRankingList');
+      if (!listEl) return;
+      try {
+        if (!highScores || !Array.isArray(highScores)) {
+          highScores = [
+            { name: 'CMB', score: 50000, level: 'NA', maxCombo: 'NA' },
+            { name: 'TIM', score: 30000, level: 'NA', maxCombo: 'NA' },
+            { name: 'CPU', score: 15000, level: 'NA', maxCombo: 'NA' },
+            { name: 'AAA', score: 8000, level: 'NA', maxCombo: 'NA' },
+            { name: 'BBB', score: 3000, level: 'NA', maxCombo: 'NA' }
+          ];
+        }
+        listEl.innerHTML = highScores.map((h, i) => {
+          let lvlStr = h.level !== undefined ? h.level : 'NA';
+          let comboStr = h.maxCombo !== undefined ? h.maxCombo : 'NA';
+          return `
+            <div class="ranking-row">
+              <span><b>${i + 1}. ${h.name || '---'}</b></span>
+              <span>${h.score || 0} <span style="color:#38bdf8;">(LV:${lvlStr} C:${comboStr})</span></span>
+            </div>
+          `;
+        }).join('');
+      } catch (e) {
+        listEl.innerHTML = '<div class="ranking-row"><span>1. CMB</span><span>50000 (LV:NA C:NA)</span></div>';
+      }
+    }
+    renderRankingList();
+
+    // --- Main Game Loop ---
+    function update(time = 0) {
+      const startTime = performance.now();
+      const dt = Math.min((time - lastTime) / 1000, 0.1);
+      lastTime = time;
+
+      frameCount++;
+      if (time - lastFpsTime >= 1000) {
+        currentFps = Math.round((frameCount * 1000) / (time - lastFpsTime));
+        frameCount = 0;
+        lastFpsTime = time;
+
+        document.getElementById('valFps').innerText = currentFps;
+        document.getElementById('valCpu').innerText = `${renderCpuTime.toFixed(1)}ms`;
+        document.getElementById('valGps').innerText = gpsStatus;
+      }
+
+      if (gameStarted && !isPaused && !isGameOver && piece) {
+        const isTouchingGround = collide(grid, piece, 0, 1);
+
+        if (isTouchingGround) {
+          piecePixelY = piece.gridY * BLOCK_SIZE;
+          lockTimer += dt;
+          
+          if (lockTimer >= LOCK_DELAY) {
+            lockPiece();
+          }
+        } else {
+          lockTimer = 0;
+          
+          const baseSpeed = BLOCK_SIZE / (dropInterval / 1000);
+          const moveSpeed = isSoftDropping ? Math.max(baseSpeed * 25, BLOCK_SIZE * 35) : baseSpeed;
+
+          const nextPixelY = piecePixelY + moveSpeed * dt;
+          const nextGridY = Math.floor(nextPixelY / BLOCK_SIZE);
+
+          if (isSoftDropping && nextGridY > piece.gridY) {
+            score += (nextGridY - piece.gridY);
+          }
+
+          if (collide(grid, piece, 0, nextGridY - piece.gridY)) {
+            while (!collide(grid, piece, 0, 1)) {
+              piece.gridY++;
+            }
+            piecePixelY = piece.gridY * BLOCK_SIZE;
+          } else {
+            piecePixelY = nextPixelY;
+            piece.gridY = Math.floor(piecePixelY / BLOCK_SIZE);
+          }
+        }
+        
+        if (shakeTimer > 0) {
+          shakeTimer -= dt;
+          const offsetX = (Math.random() - 0.5) * shakeIntensity;
+          const offsetY = (Math.random() - 0.5) * shakeIntensity;
+          boardWrapper.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
+        } else {
+          boardWrapper.style.transform = 'translate(0, 0)';
+        }
+
+        updateParticles(dt);
+        pollGamepad();
+      }
+
+      draw();
+
+      renderCpuTime = performance.now() - startTime;
+      requestAnimationFrame(update);
+    }
+
+    function pollGamepad() {
+      const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+      const gp = gamepads[0];
+      if (!gp) return;
+
+      const checkButton = (action, buttonIdx) => {
+        const isPressed = gp.buttons[buttonIdx] && gp.buttons[buttonIdx].pressed;
+        if (action === 'softDrop') {
+          isSoftDropping = isPressed;
+        } else {
+          if (isPressed && !gamepadButtonState[action]) {
+            executeAction(action);
+            gamepadButtonState[action] = true;
+          } else if (!isPressed) {
+            gamepadButtonState[action] = false;
+          }
+        }
+      };
+
+      Object.keys(gamepadMapping).forEach(action => {
+        checkButton(action, gamepadMapping[action]);
+      });
+    }
+
+    function executeAction(action) {
+      if (!gameStarted) { startGame(); return; }
+      if (isGameOver) return;
+      if (action === 'pause') { togglePause(); return; }
+      if (isPaused) return;
+
+      switch (action) {
+        case 'left': moveLeft(); break;
+        case 'right': moveRight(); break;
+        case 'hardDrop': hardDrop(); break;
+        case 'rotCW': rotatePiece(1); break;
+        case 'rotCCW': rotatePiece(-1); break;
+        case 'hold': hold(); break;
+      }
+    }
+
+    // --- Event Listeners ---
+    window.addEventListener('keydown', e => {
+      const initialScreen = document.getElementById('initialInputScreen');
+      if (!initialScreen.classList.contains('hidden') && !document.getElementById('initialEntryContainer').classList.contains('hidden')) {
+        if (e.code === 'ArrowUp') {
+          initials[initialIndex] = String.fromCharCode(initials[initialIndex].charCodeAt(0) === 90 ? 65 : initials[initialIndex].charCodeAt(0) + 1);
+          updateInitialDisplay();
+          SFX.move();
+        } else if (e.code === 'ArrowDown') {
+          initials[initialIndex] = String.fromCharCode(initials[initialIndex].charCodeAt(0) === 65 ? 90 : initials[initialIndex].charCodeAt(0) - 1);
+          updateInitialDisplay();
+          SFX.move();
+        } else if (e.code === 'ArrowLeft') {
+          if (initialIndex > 0) { initialIndex--; updateInitialDisplay(); SFX.rotate(); }
+        } else if (e.code === 'ArrowRight') {
+          if (initialIndex < 2) { initialIndex++; updateInitialDisplay(); SFX.rotate(); }
+        } else if (e.code === 'Enter') {
+          if (initialIndex < 2) {
+            initialIndex++;
+            updateInitialDisplay();
+            SFX.rotate();
+          } else {
+            submitInitial();
+          }
+        }
+        return;
+      }
+
+      if (e.code === 'ArrowDown') {
+        isSoftDropping = true;
+      }
+
+      if (keyState[e.code]) return;
+      keyState[e.code] = true;
+
+      if (!gameStarted) { startGame(); return; }
+      if (e.code === 'Escape') { togglePause(); return; }
+      if (isPaused || isGameOver) return;
+
+      switch (e.code) {
+        case 'ArrowLeft': moveLeft(); break;
+        case 'ArrowRight': moveRight(); break;
+        case 'ArrowUp': case 'KeyX': rotatePiece(1); break;
+        case 'KeyZ': rotatePiece(-1); break;
+        case 'Space': hardDrop(); break;
+        case 'KeyC': case 'ShiftLeft': hold(); break;
+      }
+    });
+
+    window.addEventListener('keyup', e => {
+      keyState[e.code] = false;
+      if (e.code === 'ArrowDown') {
+        isSoftDropping = false;
+      }
+    });
+
+    const titleScreen = document.getElementById('arcadeTitleScreen');
+    function handleTitleStart(e) {
+      const target = e.target;
+      if (target.closest('.ranking-box')) return;
+      if (e.type === 'touchend') e.preventDefault();
+      e.stopPropagation();
+      startGame();
+    }
+
+    titleScreen.addEventListener('click', handleTitleStart);
+    titleScreen.addEventListener('touchend', handleTitleStart, { passive: false });
+
+    document.getElementById('pressStartText').addEventListener('click', (e) => {
+      e.stopPropagation();
+      startGame();
+    });
+
+    boardCanvas.addEventListener('click', () => {
+      if (gameStarted && !isPaused) togglePause();
+    });
+
+    function bindTouch(btnId, action) {
+      const btn = document.getElementById(btnId);
+      if (!btn) return;
+      
+      if (action === 'softDrop') {
+        btn.addEventListener('touchstart', (e) => { e.preventDefault(); isSoftDropping = true; }, { passive: false });
+        btn.addEventListener('touchend', (e) => { e.preventDefault(); isSoftDropping = false; }, { passive: false });
+        btn.addEventListener('mousedown', () => { isSoftDropping = true; });
+        btn.addEventListener('mouseup', () => { isSoftDropping = false; });
+      } else {
+        btn.addEventListener('touchstart', (e) => {
+          e.preventDefault();
+          executeAction(action);
+        }, { passive: false });
+        btn.addEventListener('click', () => executeAction(action));
+      }
+    }
+
+    bindTouch('btnLeft', 'left');
+    bindTouch('btnRight', 'right');
+    bindTouch('btnSoftDrop', 'softDrop');
+    bindTouch('btnHardDrop', 'hardDrop');
+    bindTouch('btnRotCW', 'rotCW');
+    bindTouch('btnRotCCW', 'rotCCW');
+    bindTouch('btnHold', 'hold');
+    document.getElementById('btnPause').addEventListener('click', togglePause);
+
+    // Initial Entry Button Bindings
+    document.getElementById('btnCharUp').addEventListener('click', () => {
+      initials[initialIndex] = String.fromCharCode(initials[initialIndex].charCodeAt(0) === 90 ? 65 : initials[initialIndex].charCodeAt(0) + 1);
+      updateInitialDisplay();
+      SFX.move();
+    });
+    document.getElementById('btnCharDown').addEventListener('click', () => {
+      initials[initialIndex] = String.fromCharCode(initials[initialIndex].charCodeAt(0) === 65 ? 90 : initials[initialIndex].charCodeAt(0) - 1);
+      updateInitialDisplay();
+      SFX.move();
+    });
+    document.getElementById('btnPrevChar').addEventListener('click', () => {
+      if (initialIndex > 0) { initialIndex--; updateInitialDisplay(); SFX.rotate(); }
+    });
+    document.getElementById('btnNextChar').addEventListener('click', () => {
+      if (initialIndex < 2) { initialIndex++; updateInitialDisplay(); SFX.rotate(); }
+    });
+
+    function togglePause() {
+      if (isGameOver || !gameStarted) return;
+      isPaused = !isPaused;
+      document.getElementById('pauseModal').classList.toggle('active', isPaused);
+      if (isPaused) stopBGM();
+      else startBGM();
+    }
+
+    function hideModals() {
+      document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('active'));
+    }
+
+    document.getElementById('btnResume').addEventListener('click', () => {
+      isPaused = false;
+      hideModals();
+      startBGM();
+    });
+
+    document.getElementById('btnReset').addEventListener('click', () => {
+      hideModals();
+      resetGame();
+    });
+
+    document.getElementById('btnQuitToTitle').addEventListener('click', () => {
+      hideModals();
+      returnToTitle();
+    });
+
+    document.getElementById('btnBackToTitle').addEventListener('click', () => {
+      returnToTitle();
+    });
+
+    document.getElementById('btnOpenOptions').addEventListener('click', () => {
+      document.getElementById('pauseModal').classList.remove('active');
+      document.getElementById('optionsModal').classList.add('active');
+    });
+
+    document.getElementById('btnCloseOptions').addEventListener('click', () => {
+      document.getElementById('optionsModal').classList.remove('active');
+      document.getElementById('pauseModal').classList.add('active');
+    });
+
+    function bindOption(elementId, optionKey) {
+      const el = document.getElementById(elementId);
+      if (!el) return;
+      el.checked = options[optionKey];
+      el.addEventListener('change', e => {
+        options[optionKey] = e.target.checked;
+        if (optionKey === 'music') {
+          if (options.music) startBGM();
+          else stopBGM();
+        }
+        updateUI();
+      });
+    }
+
+    bindOption('optSound', 'sound');
+    bindOption('optMusic', 'music');
+    bindOption('optPerf', 'perf');
+    bindOption('optTouchControls', 'touchControls');
+    bindOption('optNext', 'showNext');
+    bindOption('optHold', 'enableHold');
+    bindOption('optCombo', 'enableCombo');
+    bindOption('optGhost', 'showGhost');
+    bindOption('optEffects', 'enableEffects');
+
+    function updateInitialDisplay() {
+      for (let i = 0; i < 3; i++) {
+        const el = document.getElementById(`char${i}`);
+        if (el) {
+          el.innerText = initials[i];
+          el.classList.toggle('active', i === initialIndex);
+        }
+      }
+    }
+
+    function submitInitial() {
+      const name = initials.join('');
+      try {
+        if (!Array.isArray(highScores)) highScores = [];
+        highScores.push({ name, score, level: level, maxCombo: maxCombo });
+        highScores.sort((a, b) => b.score - a.score);
+        highScores = highScores.slice(0, 5);
+        safeSetStorage('combotime_arcade_scores', highScores);
+      } catch (e) {}
+
+      returnToTitle();
+    }
+
+    document.getElementById('btnSubmitInitial').addEventListener('click', submitInitial);
+
+    const configList = document.getElementById('configList');
+    let waitingForInput = null;
+
+    function renderKeyconfig() {
+      configList.innerHTML = '';
+      const actionLabels = {
+        left: 'LEFT', right: 'RIGHT', softDrop: 'SOFT DROP',
+        hardDrop: 'HARD DROP', rotCW: 'CW', rotCCW: 'CCW',
+        hold: 'HOLD', pause: 'PAUSE'
+      };
+
+      Object.keys(gamepadMapping).forEach(action => {
+        const row = document.createElement('div');
+        row.className = 'config-row';
+        row.innerHTML = `
+          <span>${actionLabels[action] || action}</span>
+          <button class="config-btn" data-action="${action}">BTN ${gamepadMapping[action]}</button>
+        `;
+        configList.appendChild(row);
+      });
+
+      configList.querySelectorAll('.config-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          waitingForInput = e.target.dataset.action;
+          btn.classList.add('waiting');
+          btn.innerText = 'PRESS...';
+        });
+      });
+    }
+
+    function pollGamepadConfig() {
+      if (!waitingForInput) return;
+      const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+      const gp = gamepads[0];
+      if (!gp) return;
+
+      gp.buttons.forEach((btn, idx) => {
+        if (btn.pressed) {
+          gamepadMapping[waitingForInput] = idx;
+          safeSetStorage('combotime_gamepad_config', gamepadMapping);
+          waitingForInput = null;
+          renderKeyconfig();
+        }
+      });
+    }
+
+    setInterval(pollGamepadConfig, 100);
+
+    document.getElementById('btnOpenKeyconfig').addEventListener('click', () => {
+      renderKeyconfig();
+      document.getElementById('optionsModal').classList.remove('active');
+      document.getElementById('keyconfigModal').classList.add('active');
+    });
+
+    document.getElementById('btnCloseKeyconfig').addEventListener('click', () => {
+      document.getElementById('keyconfigModal').classList.remove('active');
+      document.getElementById('optionsModal').classList.add('active');
+    });
+
+    updateBoardDimensions();
+    draw();
+    requestAnimationFrame(update);
+  </script>
+</body>
+</html>
