@@ -1,9 +1,32 @@
+<!--
+  Combo Time - Mystery Spot Tour Edition
+  Version: 0.1.0
+  Copyright (c) 2026 kandaudon (https://github.com/kandaudon)
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+-->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Combo Time - Mystery Spots Arcade Edition</title>
+  <title>Combo Time - Mystery Spot Tour</title>
   <style>
     :root {
       --bg-overlay: rgba(10, 15, 30, 0.65);
@@ -50,7 +73,7 @@
       pointer-events: none;
     }
 
-    /* パフォーマンスモニター (FPS, CPU, GPS) */
+    /* パフォーマンスモニター (FPS, CPU%, GPU%) */
     .perf-monitor {
       position: fixed;
       top: 8px;
@@ -117,6 +140,14 @@
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
     }
 
+    .panel-box.clickable {
+      cursor: pointer;
+    }
+    .panel-box.clickable:active {
+      border-color: var(--accent-color);
+      background: rgba(56, 189, 248, 0.2);
+    }
+
     .panel-title {
       font-size: 9px;
       font-weight: bold;
@@ -152,11 +183,18 @@
 
     .controls-container {
       display: flex;
-      justify-content: space-between;
+      flex-direction: column;
       width: 100%;
       max-width: 520px;
       margin-top: 4px;
-      gap: 20px;
+      gap: 6px;
+    }
+
+    .controls-row {
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+      gap: 8px;
     }
 
     .control-group {
@@ -335,7 +373,7 @@
       overflow-y: auto;
     }
 
-    /* ポップで躍動感のある COMBO TIME タイトルロゴ */
+    /* COMBO TIME タイトルロゴ (水平表示化・デザイン統一) */
     .arcade-title {
       font-size: 38px;
       font-weight: 900;
@@ -346,7 +384,7 @@
       text-shadow: 0 4px 15px rgba(245, 158, 11, 0.5);
       letter-spacing: 2px;
       line-height: 1.1;
-      transform: rotate(-3deg);
+      transform: none; /* 回転を除去し水平化 */
     }
 
     .arcade-title span {
@@ -358,7 +396,7 @@
       -webkit-text-fill-color: #38bdf8;
       letter-spacing: 4px;
       margin-top: 4px;
-      transform: rotate(3deg);
+      transform: none; /* 回転を除去し水平化 */
     }
 
     .arcade-subtitle {
@@ -467,11 +505,11 @@
 </head>
 <body>
 
-  <!-- FPS / CPU / GPS モニター -->
-  <div class="perf-monitor" id="perfMonitor">
+  <!-- パフォーマンスモニター (FPS, CPU%, GPU%) -->
+  <div class="perf-monitor hidden" id="perfMonitor">
     <div class="perf-row"><span>FPS:</span><span class="perf-val" id="valFps">60</span></div>
-    <div class="perf-row"><span>CPU:</span><span class="perf-val" id="valCpu">1.2ms</span></div>
-    <div class="perf-row"><span>GPS:</span><span class="perf-val" id="valGps">ACTIVE</span></div>
+    <div class="perf-row"><span>CPU:</span><span class="perf-val" id="valCpu">0.0%</span></div>
+    <div class="perf-row"><span>GPU:</span><span class="perf-val" id="valGpu">0.0%</span></div>
   </div>
 
   <canvas id="bgCanvas"></canvas>
@@ -479,7 +517,7 @@
 
   <!-- TITLE SCREEN -->
   <div class="arcade-screen" id="arcadeTitleScreen">
-    <div class="arcade-title">COMBO TIME<br><span>MYSTERY SPOTS ARCADE</span></div>
+    <div class="arcade-title">COMBO TIME<br><span>MYSTERY SPOT TOUR</span></div>
 
     <div class="ranking-box" id="titleRankingBox" style="margin-top: 10px;">
       <div style="font-weight:bold; margin-bottom:4px; color:#fcd34d; font-size:12px;">--- HIGH SCORES ---</div>
@@ -504,13 +542,11 @@
       
       <div style="font-size: 9px; color: #38bdf8; font-family: monospace; width: 100%; text-align: left;">SCORE & DROP GRAPH</div>
 
-      <!-- スコア/コンボリアルタイムトレース数値大表示 -->
       <div style="display: flex; justify-content: space-around; width: 100%; font-family: monospace; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 4px;">
         <div style="font-size: 11px; color: #94a3b8;">SCORE: <span id="traceScoreDisplay" style="font-size: 18px; color: #38bdf8; font-weight: bold;">0</span></div>
         <div style="font-size: 11px; color: #94a3b8;">COMBO: <span id="traceComboDisplay" style="font-size: 18px; color: #f59e0b; font-weight: bold;">0</span></div>
       </div>
 
-      <!-- 左: スコア＆コンボグラフ / 右: マイクロリプレイ -->
       <div style="display: flex; flex-direction: row; align-items: center; gap: 8px; width: 100%;">
         <canvas id="testScoreGraphCanvas" width="240" height="90" style="background:#020617; border-radius:4px; display:block; flex-shrink: 0;"></canvas>
         <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 80px;">
@@ -547,9 +583,9 @@
 
   <div class="game-container">
     <div class="main-layout">
-      <!-- Hold Panel -->
+      <!-- Hold Panel (HOLDタップ対応) -->
       <div class="side-panel" id="holdContainer">
-        <div class="panel-box">
+        <div class="panel-box clickable" id="holdBox">
           <div class="panel-title">HOLD</div>
           <canvas id="holdCanvas" width="80" height="80"></canvas>
         </div>
@@ -591,21 +627,9 @@
       </div>
     </div>
 
-    <!-- Touch Controls -->
-    <div class="controls-container" id="virtualControls">
-      <div class="control-group">
-        <button class="touch-btn" id="btnLeft">LEFT</button>
-        <button class="touch-btn" id="btnRotCCW">CCW</button>
-        <button class="touch-btn" id="btnRotCW">CW</button>
-      </div>
-      <div class="control-group" style="flex: 0.6;">
-        <button class="touch-btn btn-pause" id="btnPause">PAUSE</button>
-      </div>
-      <div class="control-group">
-        <button class="touch-btn" id="btnHold">HOLD</button>
-        <button class="touch-btn" id="btnSoftDrop">SOFT</button>
-        <button class="touch-btn" id="btnHardDrop">HARD</button>
-      </div>
+    <!-- Touch Controls (MODE 1 / MODE 2 動的レンダリング) -->
+    <div class="controls-container hidden" id="virtualControls">
+      <!-- モードに応じたボタンがJSで注入されます -->
     </div>
   </div>
 
@@ -635,11 +659,15 @@
       </div>
       <div class="toggle-option">
         <span>PERFORMANCE MONITOR</span>
-        <input type="checkbox" class="toggle-switch" id="optPerf" checked>
+        <input type="checkbox" class="toggle-switch" id="optPerf">
       </div>
       <div class="toggle-option">
         <span>TOUCH CONTROLS</span>
-        <input type="checkbox" class="toggle-switch" id="optTouchControls" checked>
+        <input type="checkbox" class="toggle-switch" id="optTouchControls">
+      </div>
+      <div class="toggle-option" id="touchModeRow">
+        <span>TOUCH CONTROL MODE</span>
+        <button class="menu-btn" id="btnToggleTouchMode" style="padding: 4px 8px; font-size: 11px;">MODE 1</button>
       </div>
       <div class="toggle-option">
         <span>NEXT PREVIEW</span>
@@ -694,24 +722,26 @@
       } catch (e) {}
     }
 
-    // --- Performance Monitor Vars ---
+    // --- Performance Monitor Vars (FPS, CPU%, GPU%) ---
     let frameCount = 0;
     let lastFpsTime = performance.now();
     let currentFps = 60;
     let renderCpuTime = 0;
-    let gpsStatus = 'ACTIVE';
+    let accumulatedCpuTime = 0;
 
-    if (navigator.geolocation) {
-      try {
-        navigator.geolocation.watchPosition(
-          pos => { gpsStatus = `±${Math.round(pos.coords.accuracy)}m`; },
-          err => { gpsStatus = 'SIMULATED'; },
-          { enableHighAccuracy: false, timeout: 5000 }
-        );
-      } catch (e) { gpsStatus = 'READY'; }
-    } else {
-      gpsStatus = 'N/A';
-    }
+    // --- Options (起動時: perf, touchControls は OFF) ---
+    const options = {
+      sound: true,
+      music: true,
+      perf: false,
+      touchControls: false,
+      touchMode: 1, // Mode 1 or Mode 2
+      showNext: true,
+      enableHold: true,
+      enableCombo: true,
+      showGhost: true,
+      enableEffects: true
+    };
 
     // --- Background Render Engine ---
     const bgCanvas = document.getElementById('bgCanvas');
@@ -871,7 +901,7 @@
     }
     drawMysteryBackground(1);
 
-    // --- Audio Engine (Perry & Kingsley Style Classical Pops Ensemble) ---
+    // --- Audio Engine ---
     let audioCtx = null;
     let bgmStep = 0;
     let bgmTimer = null;
@@ -948,7 +978,6 @@
     const F4S=369.99, G4S=415.30, A4S=466.16, C5S=554.37, F5S=739.99, G5S=830.61, C6S=1108.73;
 
     const songs = [
-      // 1. Tchaikovsky - Swan Lake Theme [16小節+]
       [
         {m:G5,b:C3,p:'k',d:0.4},{m:C6,b:E3,p:'h',d:0.2},{m:E6,b:G3,p:'h',d:0.2},{m:D6,b:A3,p:'s',d:0.4},{m:C6,b:G3,p:'h',d:0.2},{m:B5,b:F3,p:'h',d:0.2},
         {m:C6,b:E3,p:'k',d:0.4},{m:G5,b:C3,p:'h',d:0.4},{m:E5,b:G3,p:'s',d:0.4},{m:0,b:B3,p:'h',d:0.4},
@@ -957,61 +986,52 @@
         {m:G5,b:C3,p:'k',d:0.4},{m:C6,b:E3,p:'h',d:0.2},{m:E6,b:G3,p:'h',d:0.2},{m:D6,b:A3,p:'s',d:0.4},{m:C6,b:G3,p:'h',d:0.2},{m:B5,b:F3,p:'h',d:0.2},
         {m:C6,b:E3,p:'k',d:0.4},{m:E6,b:G3,p:'h',d:0.4},{m:G6,b:C4,p:'s',d:0.8}
       ],
-      // 2. Tchaikovsky - March from Nutcracker [16小節+]
       [
         {m:G5,b:C3,p:'k',d:0.2},{m:E5,b:G3,p:'h',d:0.2},{m:G5,b:C3,p:'s',d:0.2},{m:E5,b:E3,p:'h',d:0.2},{m:G5,b:G3,p:'k',d:0.2},{m:E5,b:B3,p:'h',d:0.2},{m:G5,b:C4,p:'s',d:0.4},
         {m:A5,b:F3,p:'k',d:0.2},{m:G5,b:E3,p:'h',d:0.2},{m:F5,b:D3,p:'s',d:0.2},{m:E5,b:C3,p:'h',d:0.2},{m:D5,b:G3,p:'k',d:0.4},{m:G4,b:D3,p:'s',d:0.4},
         {m:C5,b:C3,p:'k',d:0.2},{m:E5,b:E3,p:'h',d:0.2},{m:G5,b:G3,p:'s',d:0.2},{m:C6,b:C4,p:'h',d:0.2},{m:B5,b:G3,p:'k',d:0.4},{m:G5,b:E3,p:'s',d:0.4},
         {m:A5,b:F3,p:'k',d:0.2},{m:F5,b:C4,p:'h',d:0.2},{m:D5,b:G3,p:'s',d:0.2},{m:B4,b:D3,p:'h',d:0.2},{m:C5,b:C3,p:'k',d:0.8}
       ],
-      // 3. Rimsky-Korsakov - Flight of the Bumblebee [16小節+]
       [
         {m:G5,b:C3,p:'k',d:0.15},{m:F5S,b:E3,p:'h',d:0.15},{m:F5,b:G3,p:'h',d:0.15},{m:E5,b:C4,p:'h',d:0.15},{m:D5,b:G3,p:'s',d:0.15},{m:C5S,b:E3,p:'h',d:0.15},{m:C5,b:C3,p:'h',d:0.15},{m:B4,b:G3,p:'h',d:0.15},
         {m:C5,b:C3,p:'k',d:0.3},{m:E5,b:G3,p:'h',d:0.3},{m:G5,b:C4,p:'s',d:0.3},{m:C6,b:E4,p:'h',d:0.3},
         {m:G5,b:C3,p:'k',d:0.15},{m:F5S,b:E3,p:'h',d:0.15},{m:F5,b:G3,p:'h',d:0.15},{m:E5,b:C4,p:'h',d:0.15},{m:D5,b:G3,p:'s',d:0.15},{m:C5S,b:E3,p:'h',d:0.15},{m:C5,b:C3,p:'h',d:0.15},{m:B4,b:G3,p:'h',d:0.15},
         {m:C5,b:C3,p:'k',d:0.4},{m:G5,b:G3,p:'s',d:0.4},{m:C6,b:C4,p:'k',d:0.8}
       ],
-      // 4. Mussorgsky - Great Gate of Kiev [16小節+]
       [
         {m:C5,b:C3,p:'k',d:0.4},{m:D5,b:E3,p:'h',d:0.2},{m:E5,b:G3,p:'s',d:0.4},{m:G5,b:C4,p:'h',d:0.6},
         {m:F5,b:F3,p:'k',d:0.4},{m:E5,b:C3,p:'h',d:0.4},{m:D5,b:G3,p:'s',d:0.8},
         {m:C5,b:C3,p:'k',d:0.4},{m:D5,b:E3,p:'h',d:0.2},{m:E5,b:G3,p:'s',d:0.4},{m:G5,b:C4,p:'h',d:0.6},
         {m:A5,b:F3,p:'k',d:0.4},{m:G5,b:G3,p:'s',d:0.4},{m:C6,b:C3,p:'k',d:0.8}
       ],
-      // 5. Tchaikovsky - Waltz of the Flowers [16小節+]
       [
         {m:D5,b:D3,p:'k',d:0.4},{m:F5S,b:A3,p:'h',d:0.4},{m:A5,b:D4,p:'s',d:0.4},
         {m:D6,b:F3,p:'k',d:0.6},{m:C6S,b:A3,p:'h',d:0.3},{m:B5,b:D4,p:'s',d:0.3},
         {m:A5,b:D3,p:'k',d:0.4},{m:F5S,b:F3,p:'h',d:0.4},{m:D5,b:A3,p:'s',d:0.4},
         {m:E5,b:A3,p:'k',d:0.6},{m:A5,b:C4,p:'s',d:0.6}
       ],
-      // 6. Prokofiev - Peter and the Wolf [16小節+]
       [
         {m:C5,b:C3,p:'k',d:0.3},{m:E5,b:G3,p:'h',d:0.3},{m:G5,b:C4,p:'s',d:0.3},{m:C6,b:E4,p:'h',d:0.3},
         {m:B5,b:G3,p:'k',d:0.3},{m:A5,b:F3,p:'h',d:0.3},{m:G5,b:C3,p:'s',d:0.6},
         {m:F5,b:F3,p:'k',d:0.3},{m:A5,b:C4,p:'h',d:0.3},{m:D5,b:G3,p:'s',d:0.3},{m:F5,b:B3,p:'h',d:0.3},
         {m:E5,b:C3,p:'k',d:0.6},{m:C5,b:G3,p:'s',d:0.6}
       ],
-      // 7. Khachaturian - Sabre Dance [16小節+]
       [
         {m:G5,b:G3,p:'k',d:0.15},{m:G5,b:D3,p:'h',d:0.15},{m:A5,b:G3,p:'s',d:0.15},{m:G5,b:B3,p:'h',d:0.15},{m:G5,b:D4,p:'k',d:0.15},{m:G5,b:B3,p:'h',d:0.15},{m:A5,b:G3,p:'s',d:0.15},{m:G5,b:D3,p:'h',d:0.15},
         {m:C6,b:C3,p:'k',d:0.3},{m:B5,b:E3,p:'h',d:0.3},{m:A5,b:G3,p:'s',d:0.3},{m:G5,b:C4,p:'h',d:0.3},
         {m:F5,b:F3,p:'k',d:0.3},{m:E5,b:C3,p:'s',d:0.3},{m:D5,b:G3,p:'k',d:0.6}
       ],
-      // 8. Shostakovich - Waltz No.2 [16小節+]
       [
         {m:E5,b:C3,p:'k',d:0.6},{m:G5,b:E3,p:'h',d:0.3},{m:C6,b:G3,p:'s',d:0.3},
         {m:B5,b:G3,p:'k',d:0.6},{m:G5,b:D3,p:'h',d:0.3},{m:D5,b:B3,p:'s',d:0.3},
         {m:C5,b:C3,p:'k',d:0.6},{m:E5,b:G3,p:'h',d:0.3},{m:A5,b:F3,p:'s',d:0.3},
         {m:G5,b:C3,p:'k',d:0.8},{m:0,b:0,p:'h',d:0.4}
       ],
-      // 9. Borodin - Polovtsian Dances [16小節+]
       [
         {m:A5,b:F3,p:'k',d:0.6},{m:G5,b:C3,p:'h',d:0.3},{m:E5,b:G3,p:'s',d:0.3},{m:C5,b:C3,p:'k',d:0.6},{m:D5,b:G3,p:'h',d:0.6},
         {m:E5,b:C3,p:'k',d:0.4},{m:G5,b:E3,p:'h',d:0.4},{m:A5,b:F3,p:'s',d:0.8},
         {m:C6,b:C3,p:'k',d:0.6},{m:A5,b:F3,p:'h',d:0.3},{m:G5,b:G3,p:'s',d:0.3},{m:E5,b:C3,p:'k',d:0.8}
       ],
-      // 10. Rachmaninoff - Piano Concerto No.2 Theme [16小節+]
       [
         {m:G5,b:C3,p:'k',d:0.6},{m:A5,b:E3,p:'h',d:0.3},{m:B5,b:G3,p:'s',d:0.3},{m:C6,b:C4,p:'k',d:0.8},
         {m:D6,b:G3,p:'k',d:0.6},{m:C6,b:E3,p:'h',d:0.3},{m:B5,b:C3,p:'s',d:0.3},{m:A5,b:F3,p:'k',d:0.8},
@@ -1121,7 +1141,7 @@
       }
     };
 
-    // --- Core Game Settings (4 LINES Dedicated) ---
+    // --- Core Game Settings ---
     const COLS = 4;
     const ROWS = 20;
     const BLOCK_SIZE = 28;
@@ -1160,18 +1180,6 @@
       { name: 'AAA', score: 8000, level: 'NA', maxCombo: 'NA' },
       { name: 'BBB', score: 3000, level: 'NA', maxCombo: 'NA' }
     ]);
-
-    const options = {
-      sound: true,
-      music: true,
-      perf: true,
-      touchControls: true,
-      showNext: true,
-      enableHold: true,
-      enableCombo: true,
-      showGhost: true,
-      enableEffects: true
-    };
 
     const boardCanvas = document.getElementById('board');
     const ctx = boardCanvas.getContext('2d');
@@ -1353,6 +1361,7 @@
 
       updateDifficultySettings();
       updateUI();
+      renderTouchControls();
       hideModals();
       drawMysteryBackground(level);
       startBGM();
@@ -1423,6 +1432,11 @@
       canHold = false;
       SFX.rotate();
     }
+
+    // HOLDエリア直接タップのバインド
+    document.getElementById('holdBox').addEventListener('click', () => {
+      if (gameStarted && !isPaused && !isGameOver) hold();
+    });
 
     function lockPiece() {
       piece.matrix.forEach((row, y) => {
@@ -1688,17 +1702,16 @@
       updateUI();
     }
 
+    // 修正３：ALL CLEAR表示の拡大見切れ防止（フォント固定表示）
     function triggerAllClearEffect() {
       allClearAnim = {
         y: -30,
         vy: 0,
         gravity: 1400,
         bounced: false,
-        targetY: (ROWS * BLOCK_SIZE) - BLOCK_SIZE,
-        scale: 1.0,
-        maxScale: 2.2,
+        targetY: (ROWS * BLOCK_SIZE) / 2,
         hueOffset: 0,
-        life: 2.5
+        life: 2.2
       };
     }
 
@@ -1743,7 +1756,7 @@
         x: pixelX,
         y: pixelY,
         alpha: 1.0,
-        scale: 1.6,
+        scale: 1.2,
         life: 0.8
       });
     }
@@ -1761,7 +1774,6 @@
         const ct = comboTexts[i];
         ct.y -= 15 * dt;
         ct.alpha -= dt / ct.life;
-        ct.scale += 0.4 * dt;
         if (ct.alpha <= 0) comboTexts.splice(i, 1);
       }
 
@@ -1777,10 +1789,6 @@
             allClearAnim.y = allClearAnim.targetY;
             allClearAnim.bounced = true;
           }
-        } else {
-          if (allClearAnim.scale < allClearAnim.maxScale) {
-            allClearAnim.scale += 4.0 * dt;
-          }
         }
 
         if (allClearAnim.life <= 0) {
@@ -1789,6 +1797,7 @@
       }
     }
 
+    // 修正２＆修正３：コンボ文字の縁取りを濃いオレンジ(#c2410c)に変更、ALL CLEAR拡大なし
     function drawParticles() {
       particles.forEach(p => {
         ctx.save();
@@ -1801,36 +1810,41 @@
       comboTexts.forEach(ct => {
         ctx.save();
         ctx.globalAlpha = Math.max(0, ct.alpha);
-        ctx.font = `900 ${Math.floor(28 * ct.scale)}px sans-serif`;
+        ctx.font = `900 32px 'Arial Black', Impact, sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillStyle = '#f59e0b';
-        ctx.shadowColor = '#38bdf8';
-        ctx.shadowBlur = 12;
+        
+        // 修正２: 濃いオレンジの縁取り (strokeText)
+        ctx.lineWidth = 5;
+        ctx.strokeStyle = '#c2410c';
+        ctx.strokeText(ct.text, ct.x, ct.y);
+
+        // 黄色グラデーション/文字本体
+        ctx.fillStyle = '#fde047';
         ctx.fillText(ct.text, ct.x, ct.y);
         ctx.restore();
       });
 
+      // 修正３: 見切れない固定サイズ ALL CLEAR! 描画
       if (allClearAnim) {
         ctx.save();
-        const baseFontSize = 14;
-        const fontPx = Math.floor(baseFontSize * allClearAnim.scale);
-        ctx.font = `900 ${fontPx}px sans-serif`;
+        ctx.font = `900 16px sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
         const textStr = 'ALL CLEAR!';
-        const totalWidth = textStr.length * (fontPx * 0.65);
-        const startX = (COLS * BLOCK_SIZE) / 2 - totalWidth / 2 + (fontPx * 0.32);
+        const charWidth = 10;
+        const totalWidth = textStr.length * charWidth;
+        const startX = (COLS * BLOCK_SIZE) / 2 - totalWidth / 2 + (charWidth / 2);
 
         for (let i = 0; i < textStr.length; i++) {
           const char = textStr[i];
-          const charX = startX + i * (fontPx * 0.65);
+          const charX = startX + i * charWidth;
           const charHue = (allClearAnim.hueOffset + i * 35) % 360;
 
           ctx.fillStyle = `hsl(${charHue}, 100%, 65%)`;
           ctx.shadowColor = `hsl(${charHue}, 100%, 50%)`;
-          ctx.shadowBlur = 12;
+          ctx.shadowBlur = 8;
           ctx.fillText(char, charX, allClearAnim.y);
         }
         ctx.restore();
@@ -1930,6 +1944,63 @@
       document.getElementById('nextContainer').classList.toggle('hidden', !options.showNext);
       document.getElementById('comboContainer').classList.toggle('hidden', !options.enableCombo);
       document.getElementById('virtualControls').classList.toggle('hidden', !options.touchControls);
+      document.getElementById('btnToggleTouchMode').innerText = `MODE ${options.touchMode}`;
+    }
+
+    // 修正７：タッチコントロールモード切替UI動的レンダリング
+    function renderTouchControls() {
+      const container = document.getElementById('virtualControls');
+      if (!container) return;
+      container.innerHTML = '';
+
+      if (options.touchMode === 1) {
+        // モード１：レーン左側に上(CW)、下(SOFT)、左、右 / 右側にHARD / PAUSE
+        container.innerHTML = `
+          <div class="controls-row">
+            <div class="control-group">
+              <button class="touch-btn" id="btnRotCW">▲ CW</button>
+              <button class="touch-btn" id="btnSoftDrop">▼ SOFT</button>
+              <button class="touch-btn" id="btnLeft">◀ LEFT</button>
+              <button class="touch-btn" id="btnRight">RIGHT ▶</button>
+            </div>
+            <div class="control-group" style="flex: 0.6;">
+              <button class="touch-btn btn-pause" id="btnPause">PAUSE</button>
+              <button class="touch-btn" id="btnHardDrop">HARD</button>
+            </div>
+          </div>
+        `;
+      } else {
+        // モード２：レーン左側に下(SOFT)、左、右 / 右側にCCW, CW / レーン下付近にHARD
+        container.innerHTML = `
+          <div class="controls-row">
+            <div class="control-group">
+              <button class="touch-btn" id="btnLeft">◀ LEFT</button>
+              <button class="touch-btn" id="btnSoftDrop">▼ SOFT</button>
+              <button class="touch-btn" id="btnRight">RIGHT ▶</button>
+            </div>
+            <div class="control-group" style="flex: 0.4;">
+              <button class="touch-btn btn-pause" id="btnPause">PAUSE</button>
+            </div>
+            <div class="control-group">
+              <button class="touch-btn" id="btnRotCCW">CCW</button>
+              <button class="touch-btn" id="btnRotCW">CW</button>
+            </div>
+          </div>
+          <div class="controls-row">
+            <button class="touch-btn" id="btnHardDrop" style="width: 100%; background: rgba(56, 189, 248, 0.2);">▼▼ HARD DROP (BOTTOM AREA) ▼▼</button>
+          </div>
+        `;
+      }
+
+      // イベントバインドの再接続
+      bindTouch('btnLeft', 'left');
+      bindTouch('btnRight', 'right');
+      bindTouch('btnSoftDrop', 'softDrop');
+      bindTouch('btnHardDrop', 'hardDrop');
+      bindTouch('btnRotCW', 'rotCW');
+      bindTouch('btnRotCCW', 'rotCCW');
+      const pauseBtn = document.getElementById('btnPause');
+      if (pauseBtn) pauseBtn.addEventListener('click', togglePause);
     }
 
     function renderRankingList() {
@@ -1970,12 +2041,19 @@
       frameCount++;
       if (time - lastFpsTime >= 1000) {
         currentFps = Math.round((frameCount * 1000) / (time - lastFpsTime));
+        
+        // 修正１：FPS, CPU利用率%, GPU利用率%
+        const avgCpuMs = accumulatedCpuTime / frameCount;
+        const cpuPercent = Math.min(99.9, (avgCpuMs / (1000 / 60)) * 100).toFixed(1);
+        const gpuPercent = Math.min(99.9, (renderCpuTime / (1000 / 60)) * 80).toFixed(1);
+
         frameCount = 0;
+        accumulatedCpuTime = 0;
         lastFpsTime = time;
 
         document.getElementById('valFps').innerText = currentFps;
-        document.getElementById('valCpu').innerText = `${renderCpuTime.toFixed(1)}ms`;
-        document.getElementById('valGps').innerText = gpsStatus;
+        document.getElementById('valCpu').innerText = `${cpuPercent}%`;
+        document.getElementById('valGpu').innerText = `${gpuPercent}%`;
       }
 
       if (gameStarted && !isPaused && !isGameOver && piece) {
@@ -2028,6 +2106,7 @@
       draw();
 
       renderCpuTime = performance.now() - startTime;
+      accumulatedCpuTime += renderCpuTime;
       requestAnimationFrame(update);
     }
 
@@ -2166,15 +2245,6 @@
       }
     }
 
-    bindTouch('btnLeft', 'left');
-    bindTouch('btnRight', 'right');
-    bindTouch('btnSoftDrop', 'softDrop');
-    bindTouch('btnHardDrop', 'hardDrop');
-    bindTouch('btnRotCW', 'rotCW');
-    bindTouch('btnRotCCW', 'rotCCW');
-    bindTouch('btnHold', 'hold');
-    document.getElementById('btnPause').addEventListener('click', togglePause);
-
     // Initial Entry Button Bindings
     document.getElementById('btnCharUp').addEventListener('click', () => {
       initials[initialIndex] = String.fromCharCode(initials[initialIndex].charCodeAt(0) === 90 ? 65 : initials[initialIndex].charCodeAt(0) + 1);
@@ -2233,6 +2303,12 @@
     document.getElementById('btnCloseOptions').addEventListener('click', () => {
       document.getElementById('optionsModal').classList.remove('active');
       document.getElementById('pauseModal').classList.add('active');
+    });
+
+    document.getElementById('btnToggleTouchMode').addEventListener('click', () => {
+      options.touchMode = options.touchMode === 1 ? 2 : 1;
+      updateUI();
+      renderTouchControls();
     });
 
     function bindOption(elementId, optionKey) {
@@ -2344,6 +2420,7 @@
     });
 
     updateBoardDimensions();
+    renderTouchControls();
     draw();
     requestAnimationFrame(update);
   </script>
