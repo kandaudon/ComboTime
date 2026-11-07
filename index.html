@@ -1,6 +1,6 @@
 <!--
   Combo Time - Mystery Spot Tour
-  Version: 0.2.0
+  Version: 0.3.0
   Copyright (c) 2026 kandaudon (https://github.com/kandaudon)
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -129,6 +129,7 @@
     }
 
     .panel-box {
+      position: relative;
       background: var(--card-bg);
       border: 1px solid rgba(255, 255, 255, 0.2);
       backdrop-filter: blur(8px);
@@ -138,6 +139,7 @@
       flex-direction: column;
       align-items: center;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+      overflow: hidden;
     }
 
     .panel-box.clickable {
@@ -149,6 +151,8 @@
     }
 
     .panel-title {
+      position: relative;
+      z-index: 2;
       font-size: 9px;
       font-weight: bold;
       color: var(--text-dim);
@@ -157,10 +161,30 @@
     }
 
     .value-display {
+      position: relative;
+      z-index: 2;
       font-size: 13px;
       font-weight: bold;
       color: var(--accent-color);
       font-family: monospace;
+    }
+
+    /* 修正５：コンボ専用の背景オーラキャンバスとアニメーション */
+    #comboAuraCanvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    .combo-break-anim {
+      animation: comboBreakPulse 0.4s ease-out forwards;
+    }
+
+    @keyframes comboBreakPulse {
+      0% { transform: scale(1.4); color: #ef4444; text-shadow: 0 0 12px #ef4444; }
+      100% { transform: scale(1); opacity: 0; }
     }
 
     .canvas-wrapper {
@@ -537,7 +561,7 @@
       <div style="font-size: 11px; color: #38bdf8; margin-bottom: 6px;" id="finalStatsText">LEVEL: 1 | MAX COMBO: 0</div>
     </div>
 
-    <!-- グラフ＆マイクロリプレイ（修正３：幅をレーン幅に対応した340pxに固定） -->
+    <!-- 修正３：REPLAYの横幅がブロック4個分にぴったり収まるよう余白・アスペクト比を修正 -->
     <div id="testScoreGraphContainer" style="background: rgba(15,23,42,0.85); border: 1px solid rgba(56,189,248,0.3); border-radius: 8px; padding: 8px; margin-bottom: 5px; width: 340px; display: flex; flex-direction: column; align-items: center; gap: 6px;">
       
       <div style="font-size: 9px; color: #38bdf8; font-family: monospace; width: 100%; text-align: left;">SCORE & DROP GRAPH</div>
@@ -547,12 +571,12 @@
         <div style="font-size: 11px; color: #94a3b8;">COMBO: <span id="traceComboDisplay" style="font-size: 18px; color: #f59e0b; font-weight: bold;">0</span></div>
       </div>
 
-      <div style="display: flex; flex-direction: row; align-items: center; gap: 8px; width: 100%;">
-        <canvas id="testScoreGraphCanvas" width="240" height="90" style="background:#020617; border-radius:4px; display:block; flex-shrink: 0;"></canvas>
-        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 80px;">
+      <div style="display: flex; flex-direction: row; align-items: center; justify-content: space-between; width: 100%; gap: 8px;">
+        <canvas id="testScoreGraphCanvas" width="260" height="90" style="background:#020617; border-radius:4px; display:block; flex-shrink: 0;"></canvas>
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 50px;">
           <div style="font-size: 7px; color: #94a3b8; font-family: monospace; margin-bottom: 2px;">REPLAY</div>
-          <!-- 修正３：マイクロリプレイプレビューの幅を COLS (4) に対応 -->
-          <canvas id="microReplayCanvas" width="4" height="20" style="width: 36px; height: 90px; background:#020617; border: 1px solid rgba(56,189,248,0.5); image-rendering: pixelated; object-fit: contain;"></canvas>
+          <!-- 修正３：ブロック4個分（アスペクト比 4:20）にジャストフィット（幅18px:高さ90px） -->
+          <canvas id="microReplayCanvas" width="4" height="20" style="width: 18px; height: 90px; background:#020617; border: 1px solid rgba(56,189,248,0.5); image-rendering: pixelated; object-fit: fill;"></canvas>
         </div>
       </div>
     </div>
@@ -605,7 +629,7 @@
         <canvas id="board" width="112" height="560"></canvas>
       </div>
 
-      <!-- Next Panel & Stats (修正４：SUBTOTAL、CALCULATIONを削除しすっきり整理) -->
+      <!-- Next Panel & Stats -->
       <div class="side-panel" id="nextContainer">
         <div class="panel-box">
           <div class="panel-title">NEXT</div>
@@ -615,7 +639,10 @@
           <div class="panel-title">LEVEL</div>
           <div class="value-display" id="levelDisplay">1</div>
         </div>
-        <div class="panel-box" id="comboContainer">
+
+        <!-- 修正５：コンボ成立時にのみ表示されるコンボパネル（オーラエフェクト背景付） -->
+        <div class="panel-box hidden" id="comboContainer">
+          <canvas id="comboAuraCanvas" width="105" height="50"></canvas>
           <div class="panel-title">COMBO</div>
           <div class="value-display" id="comboDisplay" style="font-size: 24px; color: #f59e0b; line-height: 1;">0</div>
         </div>
@@ -1172,6 +1199,8 @@
     const ctx = boardCanvas.getContext('2d');
     const holdCtx = document.getElementById('holdCanvas').getContext('2d');
     const nextCtx = document.getElementById('nextCanvas').getContext('2d');
+    const comboAuraCanvas = document.getElementById('comboAuraCanvas');
+    const comboAuraCtx = comboAuraCanvas ? comboAuraCanvas.getContext('2d') : null;
     const boardWrapper = document.getElementById('boardWrapper');
 
     let grid = Array(ROWS).fill(null).map(() => Array(COLS).fill(0));
@@ -1201,6 +1230,7 @@
 
     let particles = [];
     let comboTexts = [];
+    let auraParticles = [];
     let shakeTimer = 0;
     let shakeIntensity = 0;
     let isSoftDropping = false;
@@ -1323,6 +1353,7 @@
       canHold = true;
       particles = [];
       comboTexts = [];
+      auraParticles = [];
       allClearAnim = null;
       isSoftDropping = false;
 
@@ -1349,6 +1380,7 @@
       startBGM();
     }
 
+    /* 修正４：ゲーム開始時に画面を振動させないよう修正（triggerShakeを除去） */
     function startGame() {
       try { initAudio(); } catch (e) { audioCtx = null; }
       if (gameStarted) return;
@@ -1448,7 +1480,6 @@
       }
     }
 
-    // 修正２：GAME OVERのときSCOREの横（下部）にLEVEL, MAX COMBOを表示
     function triggerGameOver() {
       isGameOver = true;
       SFX.gameover();
@@ -1676,6 +1707,10 @@
           spawnComboText(clearedRows, finalStepScore, currentComboCount);
         }
       } else {
+        // 修正５：コンボ途切れ時のアニメーション呼び出し
+        if (combo > 0) {
+          triggerComboBreakAnimation(combo);
+        }
         if (!isBonusActive) {
           combo = 0;
         }
@@ -1683,7 +1718,20 @@
       updateUI();
     }
 
-    // 修正１：ALL CLEARの場所を最下段まで進め、画面下でバウンドさせる
+    /* 修正５：コンボが切れた際に強調表示してフェードアウト */
+    function triggerComboBreakAnimation(brokenComboVal) {
+      const el = document.getElementById('comboDisplay');
+      if (!el) return;
+      el.innerText = brokenComboVal;
+      el.classList.remove('combo-break-anim');
+      void el.offsetWidth; // アニメーションのリセット用リフロー
+      el.classList.add('combo-break-anim');
+      
+      setTimeout(() => {
+        el.classList.remove('combo-break-anim');
+      }, 400);
+    }
+
     function triggerAllClearEffect() {
       allClearAnim = {
         y: -30,
@@ -1726,7 +1774,6 @@
       });
     }
 
-    // 修正４：得点を「+123K」のような3桁＋単位（K, M, B等）でフォーマット＆単位別パレット適用
     function formatScoreWithUnit(val) {
       if (val >= 1e9) return '+' + (val / 1e9).toFixed(1) + 'B';
       if (val >= 1e6) return '+' + (val / 1e6).toFixed(1) + 'M';
@@ -1735,12 +1782,12 @@
     }
 
     function getUnitPalette(val) {
-      if (val >= 1e6) { // M / B (高得点・高コンボ: プレミアムな紫/ピンク系)
+      if (val >= 1e6) {
         return { text: '#f0abfc', stroke: '#701a75' };
-      } else if (val >= 1e3) { // K (中得点: シアン/スカイブルー系)
+      } else if (val >= 1e3) {
         return { text: '#38bdf8', stroke: '#0369a1' };
       }
-      return { text: '#fde047', stroke: '#c2410c' }; // 通常 (黄色/濃いオレンジ)
+      return { text: '#fde047', stroke: '#c2410c' };
     }
 
     function spawnComboText(clearedRows, rawScore, comboCount) {
@@ -1789,7 +1836,7 @@
 
           if (allClearAnim.y >= allClearAnim.targetY) {
             allClearAnim.y = allClearAnim.targetY;
-            allClearAnim.vy = -allClearAnim.vy * 0.45; // バウンド跳ね返り
+            allClearAnim.vy = -allClearAnim.vy * 0.45;
             if (Math.abs(allClearAnim.vy) < 50) {
               allClearAnim.bounced = true;
             }
@@ -1849,6 +1896,68 @@
           ctx.fillText(char, charX, allClearAnim.y);
         }
         ctx.restore();
+      }
+    }
+
+    /* 修正５：コンボ数に応じたオーラ/エネルギー背景の計算＆描画 */
+    function getComboColorHue(c) {
+      return (200 + (c - 1) * 35) % 360;
+    }
+
+    function updateAndDrawComboAura(dt) {
+      if (!comboAuraCtx || !options.enableCombo || combo <= 0) {
+        if (comboAuraCtx) comboAuraCtx.clearRect(0, 0, comboAuraCanvas.width, comboAuraCanvas.height);
+        return;
+      }
+
+      const w = comboAuraCanvas.width;
+      const h = comboAuraCanvas.height;
+      comboAuraCtx.clearRect(0, 0, w, h);
+
+      const baseHue = getComboColorHue(combo);
+
+      // オーラのエネルギー粒子の生成
+      if (Math.random() < 0.6) {
+        auraParticles.push({
+          x: Math.random() * w,
+          y: h + 5,
+          vx: (Math.random() - 0.5) * 1.5,
+          vy: -(Math.random() * 25 + 15),
+          size: Math.random() * 8 + 4,
+          hue: baseHue + (Math.random() - 0.5) * 20,
+          alpha: Math.random() * 0.7 + 0.3
+        });
+      }
+
+      // オーラ中央グラデーション
+      const grad = comboAuraCtx.createRadialGradient(w / 2, h / 2, 2, w / 2, h / 2, w / 1.2);
+      grad.addColorStop(0, `hsla(${baseHue}, 90%, 60%, 0.4)`);
+      grad.addColorStop(1, `hsla(${baseHue}, 90%, 40%, 0)`);
+      comboAuraCtx.fillStyle = grad;
+      comboAuraCtx.fillRect(0, 0, w, h);
+
+      // 粒子のアニメーション更新＆描画
+      for (let i = auraParticles.length - 1; i >= 0; i--) {
+        let p = auraParticles[i];
+        p.x += p.vx;
+        p.y += p.vy * dt;
+        p.alpha -= dt * 0.8;
+        p.size *= 0.96;
+
+        if (p.alpha <= 0 || p.size < 0.5) {
+          auraParticles.splice(i, 1);
+          continue;
+        }
+
+        comboAuraCtx.save();
+        comboAuraCtx.globalAlpha = p.alpha;
+        comboAuraCtx.fillStyle = `hsl(${p.hue}, 100%, 65%)`;
+        comboAuraCtx.shadowColor = `hsl(${p.hue}, 100%, 50%)`;
+        comboAuraCtx.shadowBlur = 6;
+        comboAuraCtx.beginPath();
+        comboAuraCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        comboAuraCtx.fill();
+        comboAuraCtx.restore();
       }
     }
 
@@ -1935,12 +2044,22 @@
       document.getElementById('scoreDisplay').innerText = score;
       document.getElementById('linesDisplay').innerText = lines;
       document.getElementById('levelDisplay').innerText = level;
-      document.getElementById('comboDisplay').innerText = combo;
+
+      /* 修正５：コンボ成立時（COMBO > 0）の時だけパネル表示＆文字色のグラデーション変化 */
+      const comboBox = document.getElementById('comboContainer');
+      if (options.enableCombo && combo > 0) {
+        comboBox.classList.remove('hidden');
+        const comboDisp = document.getElementById('comboDisplay');
+        comboDisp.innerText = combo;
+        const hue = getComboColorHue(combo);
+        comboDisp.style.color = `hsl(${hue}, 100%, 65%)`;
+      } else if (!comboBox.querySelector('.combo-break-anim')) {
+        comboBox.classList.add('hidden');
+      }
 
       document.getElementById('perfMonitor').classList.toggle('hidden', !options.perf);
       document.getElementById('holdContainer').classList.toggle('hidden', !options.enableHold);
       document.getElementById('nextContainer').classList.toggle('hidden', !options.showNext);
-      document.getElementById('comboContainer').classList.toggle('hidden', !options.enableCombo);
       document.getElementById('virtualControls').classList.toggle('hidden', !options.touchControls);
       document.getElementById('btnToggleTouchMode').innerText = `MODE ${options.touchMode}`;
     }
@@ -2091,6 +2210,7 @@
         }
 
         updateParticles(dt);
+        updateAndDrawComboAura(dt);
         pollGamepad();
       }
 
