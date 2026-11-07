@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#101827">
+<title>Touch Input Lab - 13 Interfaces</title>
+<style>
+:root{color-scheme:dark;--bg:#101827;--panel:#182437;--panel2:#223149;--line:#34445d;--text:#edf3fb;--muted:#a9b8cb;--accent:#62d6b5;--orange:#ffb86b;--red:#ff7777}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+body{padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+header{padding:16px 16px 10px;max-width:1100px;margin:auto}
+h1{font-size:clamp(21px,4vw,30px);margin:0 0 5px}
+.sub{color:var(--muted);font-size:13px}
+main{max-width:1100px;margin:auto;padding:0 12px 24px;display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.toolbar{padding:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-bottom:1px solid var(--line)}
+select,button,input{font:inherit}
+select,button{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:9px;padding:9px 11px}
+button:active{transform:scale(.97)}
+button.primary{background:#176b5a;border-color:#278c77}
+#stageWrap{padding:10px}
+#stage{display:block;width:100%;height:min(62vh,560px);min-height:340px;background:#0b1220;border:1px solid #3a4b64;border-radius:10px;touch-action:none;user-select:none;-webkit-user-select:none}
+.hint{padding:0 13px 12px;color:var(--muted);font-size:13px;line-height:1.5}
+.side{padding:14px}
+.side h2{font-size:16px;margin:0 0 10px}
+.metric{display:grid;grid-template-columns:1fr auto;gap:6px;padding:7px 0;border-bottom:1px solid #2c3b51;font-size:13px}
+.metric span:first-child{color:var(--muted)}
+.metric strong{font-variant-numeric:tabular-nums;text-align:right;overflow-wrap:anywhere}
+#eventLog{font:12px ui-monospace,monospace;color:#c5d4e7;white-space:pre-wrap;max-height:180px;overflow:auto;margin-top:10px;background:#0d1726;padding:9px;border-radius:8px}
+.options{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:0 12px 12px;font-size:13px;color:var(--muted)}
+.options label{display:flex;gap:6px;align-items:center}
+.options input{accent-color:var(--accent)}
+footer{max-width:1100px;margin:auto;padding:0 14px 22px;color:var(--muted);font-size:12px;line-height:1.5}
+@media(max-width:800px){main{grid-template-columns:1fr}.side{order:2}#stage{height:55vh;min-height:320px}.toolbar{gap:6px}select{flex:1;min-width:190px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Touch Input Lab</h1>
+  <div class="sub">スマートフォン・タブレット向けタッチ入力 13方式の実験デモ</div>
+</header>
+<main>
+<section class="card">
+  <div class="toolbar">
+    <select id="mode" aria-label="入力方式">
+      <option value="fixed">01 固定ボタン</option>
+      <option value="dpad">02 仮想十字キー</option>
+      <option value="fixedjoy">03 固定アナログスティック</option>
+      <option value="floating">04 フローティングスティック</option>
+      <option value="flick">05 フリック</option>
+      <option value="swipe">06 スワイプ</option>
+      <option value="drag">07 ドラッグ（相対移動）</option>
+      <option value="absolute">08 絶対位置・ポイント</option>
+      <option value="trace">09 トレース</option>
+      <option value="longpress">10 長押し</option>
+      <option value="multi">11 マルチタッチ</option>
+      <option value="pinch">12 ピンチ</option>
+      <option value="rotate">13 回転</option>
+    </select>
+    <button id="reset" type="button">リセット</button>
+    <button id="vibrate" type="button">振動テスト</button>
+  </div>
+  <div id="stageWrap"><canvas id="stage"></canvas></div>
+  <div class="options">
+    <label><input type="checkbox" id="haptic"> 入力時に振動（対応端末のみ）</label>
+    <label>しきい値 <input id="threshold" type="range" min="5" max="80" value="24"></label>
+    <span id="thresholdVal">24 px</span>
+  </div>
+  <div class="hint" id="hint" aria-live="polite"></div>
+</section>
+<aside class="card side">
+  <h2>入力モニター</h2>
+  <div class="metric"><span>選択方式</span><strong id="mMode">固定ボタン</strong></div>
+  <div class="metric"><span>接触中の指</span><strong id="mPointers">0</strong></div>
+  <div class="metric"><span>入力状態</span><strong id="mState">待機</strong></div>
+  <div class="metric"><span>X / Y</span><strong id="mXY">0 / 0</strong></div>
+  <div class="metric"><span>距離 / 速度</span><strong id="mDistance">0 / 0</strong></div>
+  <div class="metric"><span>方向 / 角度</span><strong id="mDirection">—</strong></div>
+  <div class="metric"><span>継続時間</span><strong id="mDuration">0 ms</strong></div>
+  <div class="metric"><span>選択点数</span><strong id="mCount">0</strong></div>
+  <div id="eventLog">イベントログ\n操作するとここに記録されます。</div>
+</aside>
+</main>
+<footer>
+操作領域はCanvas全体です。Pointer Eventsを使用し、タッチ・マウス・ペンを共通処理します。ブラウザやOSの都合で入力が中断された場合（pointercancel）も状態を解除します。振動APIは端末・ブラウザ依存で、iOS Safariなどでは利用できない場合があります。
+</footer>
+<script>
+(() => {
+'use strict';
+const canvas=document.getElementById('stage'),ctx=canvas.getContext('2d');
+const modeEl=document.getElementById('mode'),hintEl=document.getElementById('hint');
+const pointers=new Map(), logEl=document.getElementById('eventLog');
+const $=id=>document.getElementById(id);
+let W=800,H=500,dpr=1,mode='fixed',start=null,last=null,gesture=null,trace=[],selected=[],buttons={},joy=null,pinchStart=0,rotateStart=0,longTimer=null,longFired=false,downAt=0,lastMoveAt=0,velocity=0,clickPoints=[];
+const names={fixed:'固定ボタン',dpad:'仮想十字キー',fixedjoy:'固定アナログスティック',floating:'フローティングスティック',flick:'フリック',swipe:'スワイプ',drag:'ドラッグ（相対移動）',absolute:'絶対位置・ポイント',trace:'トレース',longpress:'長押し',multi:'マルチタッチ',pinch:'ピンチ',rotate:'回転'};
+const hints={
+fixed:'画面下部の左右ボタンとAボタンを押してください。複数ボタンの同時押しにも対応します。',
+dpad:'画面左下の十字キーを上下左右・斜めに操作してください。',
+fixedjoy:'左下の固定スティックをドラッグしてください。中心からの方向と強さを表示します。',
+floating:'画面の好きな位置にタッチし、そのままドラッグしてください。最初の接触位置がスティック中心になります。',
+flick:'短く指を滑らせて離してください。移動距離の大きい軸で4方向を判定します。',
+swipe:'指を一定距離以上スライドしてください。方向・距離・速度を表示します。',
+drag:'タッチ開始位置からの相対移動量を取得します。開始位置を基準にベクトルを表示します。',
+absolute:'画面上の任意の位置をタップしてください。タッチ座標にマーカーを配置します。',
+trace:'指で線を描いてください。軌跡を記録し、通過点数を表示します。',
+longpress:'同じ場所をしきい値時間以上（約550ms）長押ししてください。動かしすぎるとキャンセルします。',
+multi:'2本以上の指を同時に置いてください。各接点を個別に表示します。',
+pinch:'2本指でタッチし、指の間隔を広げたり狭めたりしてください。距離と倍率を表示します。',
+rotate:'2本指でタッチし、指を回転させてください。2点間の角度変化を表示します。'
+};
+function resize(){
+ const r=canvas.getBoundingClientRect();dpr=Math.min(devicePixelRatio||1,2);
+ W=r.width;H=r.height;canvas.width=Math.round(W*dpr);canvas.height=Math.round(H*dpr);
+ ctx.setTransform(dpr,0,0,dpr,0,0);draw();
+}
+function log(s){const t=new Date().toLocaleTimeString();logEl.textContent=`${t} ${s}\n`+logEl.textContent;logEl.textContent=logEl.textContent.slice(0,1500)}
+function vibrate(ms=10){if($('haptic').checked&&navigator.vibrate) navigator.vibrate(ms)}
+function p(e){const r=canvas.getBoundingClientRect();return {x:e.clientX-r.left,y:e.clientY-r.top}}
+function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y)}
+function angle(a,b){return Math.atan2(b.y-a.y,b.x-a.x)*180/Math.PI}
+function normAngle(a){while(a>180)a-=360;while(a< -180)a+=360;return a}
+function threshold(){return Number($('threshold').value)}
+function clearGesture(){start=null;last=null;gesture=null;trace=[];selected=[];joy=null;longFired=false;if(longTimer)clearTimeout(longTimer);longTimer=null}
+function setMode(){mode=modeEl.value;clearGesture();buttons={};clickPoints=[];log('方式変更: '+names[mode]);hintEl.textContent=hints[mode];$('mMode').textContent=names[mode];draw();updateMonitor()}
+function circle(x,y,r,fill,stroke='#fff',lw=2){ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fillStyle=fill;ctx.fill();if(stroke){ctx.lineWidth=lw;ctx.strokeStyle=stroke;ctx.stroke()}}
+function line(a,b,color='#62d6b5',lw=3){ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.strokeStyle=color;ctx.lineWidth=lw;ctx.lineCap='round';ctx.stroke()}
+function text(s,x,y,size=14,color='#edf3fb',align='left'){ctx.fillStyle=color;ctx.font=`${size}px system-ui`;ctx.textAlign=align;ctx.fillText(s,x,y)}
+function button(x,y,r,label,active=false){circle(x,y,r,active?'#b66b28':'#34445d','#d7e3f3',2);text(label,x,y+6,22,'#fff','center');if(active)circle(x,y,r+7,null,'#ffb86b',2)}
+function draw(){
+ ctx.clearRect(0,0,W,H);ctx.fillStyle='#0b1220';ctx.fillRect(0,0,W,H);
+ // subtle grid
+ ctx.strokeStyle='#17263a';ctx.lineWidth=1;
+ for(let x=0;x<W;x+=40){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke()}
+ for(let y=0;y<H;y+=40){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke()}
+ text(names[mode],16,25,15,'#a9b8cb');
+ if(mode==='fixed'){
+  ctx.fillStyle='#17263a';ctx.fillRect(0,H*.55,W,H*.45);
+  button(W*.16,H*.78,Math.min(38,W*.07),'◀',!!buttons.left);
+  button(W*.34,H*.78,Math.min(38,W*.07),'▶',!!buttons.right);
+  button(W*.82,H*.78,Math.min(42,W*.075),'A',!!buttons.action);
+  text('下部操作エリア',W/2,H*.62,13,'#8ea1b9','center');
+ }else if(mode==='dpad'){
+  const x=W*.23,y=H*.72,r=Math.min(32,W*.055);
+  button(x,y-r,r,'▲',!!buttons.up);button(x,y+r,r,'▼',!!buttons.down);
+  button(x-r,y,r,'◀',!!buttons.left);button(x+r,y,r,'▶',!!buttons.right);
+  circle(x,y,12,'#1a2b40','#9fb1c8');
+ }else if(mode==='fixedjoy'||mode==='floating'){
+  const c=mode==='fixedjoy'?{x:W*.22,y:H*.72}:joy?.center;
+  if(c){circle(c.x,c.y,62,'#34445d88','#a9b8cb');circle(c.x,c.y,8,'#a9b8cb');const v=joy?.v||{x:0,y:0};circle(c.x+v.x*48,c.y+v.y*48,24,'#62d6b5','#eafff8');}
+  text(mode==='fixedjoy'?'固定中心':'接触位置が中心',W*.5,H*.52,14,'#a9b8cb','center');
+ }else if(mode==='flick'||mode==='swipe'||mode==='drag'){
+  if(start){circle(start.x,start.y,8,'#ffb86b');if(last){line(start,last);circle(last.x,last.y,7,'#62d6b5');}}
+  text('タッチしてドラッグ',W/2,H*.5,16,'#8195af','center');
+ }else if(mode==='absolute'){
+  clickPoints.forEach(q=>{circle(q.x,q.y,15,'#62d6b5');text(`${Math.round(q.x)},${Math.round(q.y)}`,q.x+20,q.y-15,12)});
+  text('任意の位置をタップ',W/2,H*.5,16,'#8195af','center');
+ }else if(mode==='trace'){
+  if(trace.length>1){ctx.beginPath();ctx.moveTo(trace[0].x,trace[0].y);trace.slice(1).forEach(q=>ctx.lineTo(q.x,q.y));ctx.strokeStyle='#62d6b5';ctx.lineWidth=5;ctx.lineCap='round';ctx.lineJoin='round';ctx.stroke()}
+  trace.forEach((q,i)=>{if(i%5===0)circle(q.x,q.y,3,'#ffb86b',null)});
+ }else if(mode==='longpress'){
+  if(start){circle(start.x,start.y,20,longFired?'#62d6b5':'#34445d');text(longFired?'LONG PRESS!':'長押し中…',start.x+28,start.y-10,14)}
+ }else if(mode==='multi'||mode==='pinch'||mode==='rotate'){
+  const pts=[...pointers.values()];
+  pts.forEach((q,i)=>{circle(q.x,q.y,22,'#287c6b');text(String(i+1),q.x,q.y+5,16,'#fff','center')});
+  if(pts.length>=2){line(pts[0],pts[1],'#ffb86b',4);const mid={x:(pts[0].x+pts[1].x)/2,y:(pts[0].y+pts[1].y)/2};text(`${Math.round(dist(pts[0],pts[1]))} px`,mid.x,mid.y-14,14,'#ffb86b','center')}
+ }
+}
+function updateMonitor(){
+ const pts=[...pointers.values()];
+ $('mPointers').textContent=pts.length;
+ let state='待機',xy='0 / 0',d='0 / 0',dir='—',duration='0 ms',count=selected.length||trace.length;
+ if(start){state=longFired?'長押し成立':'入力中';xy=`${Math.round(last?.x??start.x)} / ${Math.round(last?.y??start.y)}`;if(last){const dx=last.x-start.x,dy=last.y-start.y;d=`${Math.round(Math.hypot(dx,dy))} / ${Math.round(velocity)}`;dir=`${Math.round(Math.atan2(dy,dx)*180/Math.PI)}°`;}duration=`${Math.max(0,Date.now()-downAt)} ms`;}
+ if(mode==='fixed'||mode==='dpad')state=Object.values(buttons).some(Boolean)?Object.keys(buttons).filter(k=>buttons[k]).join(', '):state;
+ if(mode==='fixedjoy'||mode==='floating'){const v=joy?.v||{x:0,y:0};xy=`${v.x.toFixed(2)} / ${v.y.toFixed(2)}`;state=joy?'スティック入力':'待機';d=`${Math.round(Math.hypot(v.x,v.y)*100)}% / —`;dir=joy?`${Math.round(Math.atan2(v.y,v.x)*180/Math.PI)}°`:'—'}
+ if(mode==='multi')state=pts.length?`${pts.length}点同時入力`:'待機';
+ if(mode==='pinch'&&pts.length>=2){const now=dist(pts[0],pts[1]);d=`${Math.round(now)} px / ${pinchStart? (now/pinchStart).toFixed(2)+'×':'—'}`;state='ピンチ計測'}
+ if(mode==='rotate'&&pts.length>=2){dir=`${Math.round(normAngle(angle(pts[0],pts[1])-rotateStart))}°`;state='回転計測'}
+ if(mode==='absolute')count=clickPoints.length;
+ $('mState').textContent=state;$('mXY').textContent=xy;$('mDistance').textContent=d;$('mDirection').textContent=dir;$('mDuration').textContent=duration;$('mCount').textContent=count;
+}
+function buttonHit(q){
+ const zones=mode==='fixed'?[
+  ['left',W*.16,H*.78,48],['right',W*.34,H*.78,48],['action',W*.82,H*.78,52]
+ ]:[
+  ['up',W*.23,H*.72-32,40],['down',W*.23,H*.72+32,40],['left',W*.23-32,H*.72,40],['right',W*.23+32,H*.72,40]
+ ];
+ return zones.find(z=>Math.hypot(q.x-z[1],q.y-z[2])<z[3])?.[0];
+}
+function onDown(e){
+ e.preventDefault();const q=p(e);pointers.set(e.pointerId,q);canvas.setPointerCapture(e.pointerId);
+ if(mode==='fixed'||mode==='dpad'){
+  const b=buttonHit(q);if(b){buttons[b]=true;vibrate();log('ボタン押下: '+b)}
+ }else if(mode==='fixedjoy'||mode==='floating'){
+  const c=mode==='fixedjoy'?{x:W*.22,y:H*.72}:q;
+  joy={center:c,v:{x:0,y:0},id:e.pointerId};updateJoy(q);vibrate();
+ }else if(mode==='absolute'){
+  clickPoints.push(q);if(clickPoints.length>20)clickPoints.shift();log(`座標タップ: ${Math.round(q.x)}, ${Math.round(q.y)}`);vibrate();
+ }else if(mode==='trace'){trace=[q];start=q;last=q;downAt=Date.now()}
+ else if(mode==='multi'||mode==='pinch'||mode==='rotate'){
+  if(pointers.size===2){const a=[...pointers.values()];pinchStart=dist(a[0],a[1]);rotateStart=angle(a[0],a[1]);}
+  log('接点追加: '+pointers.size);
+ }else{
+  start=q;last=q;gesture={id:e.pointerId};downAt=Date.now();lastMoveAt=downAt;velocity=0;
+  if(mode==='longpress'){longFired=false;longTimer=setTimeout(()=>{if(start){longFired=true;vibrate(25);log('長押し成立')};draw();updateMonitor()},550)}
+ }
+ draw();updateMonitor();
+}
+function updateJoy(q){
+ if(!joy)return;const dx=q.x-joy.center.x,dy=q.y-joy.center.y,dd=Math.hypot(dx,dy),s=Math.min(1,58/(dd||1));
+ joy.v={x:dx*s/58,y:dy*s/58};
+}
+function onMove(e){
+ if(!pointers.has(e.pointerId))return;
+ const q=p(e),old=pointers.get(e.pointerId);pointers.set(e.pointerId,q);
+ if((mode==='fixedjoy'||mode==='floating')&&joy?.id===e.pointerId)updateJoy(q);
+ if(mode==='trace'&&start){trace.push(q);last=q}
+ else if(start&&gesture?.id===e.pointerId){
+  const now=Date.now(),dt=Math.max(1,now-lastMoveAt);velocity=dist(q,last||start)/(dt/1000);lastMoveAt=now;
+  if(mode==='longpress'&&dist(q,start)>threshold()){if(longTimer)clearTimeout(longTimer);longTimer=null}
+  last=q;
+ }
+ if(mode==='pinch'||mode==='rotate'){/* pointer map updated; render below */}
+ draw();updateMonitor();
+}
+function onUp(e,cancel=false){
+ const q=p(e);if(pointers.has(e.pointerId))pointers.delete(e.pointerId);
+ if(mode==='fixed'||mode==='dpad'){
+  const b=buttonHit(q);if(b)buttons[b]=false;
+  // Also release any pressed state associated with the ending contact.
+  if(b)log('ボタン離上: '+b);
+ }else if((mode==='fixedjoy'||mode==='floating')&&joy?.id===e.pointerId){joy=null;log('スティック解除')}
+ else if(start&&gesture?.id===e.pointerId){
+  const dx=q.x-start.x,dy=q.y-start.y,dd=Math.hypot(dx,dy);
+  if(mode==='flick'){
+   if(dd>=threshold()){const dir=Math.abs(dx)>Math.abs(dy)?(dx>0?'右':'左'):(dy>0?'下':'上');log('フリック: '+dir);vibrate()}
+   else log('フリック不成立（距離不足）');
+  }else if(mode==='swipe'){
+   log(dd>=threshold()?`スワイプ: ${Math.round(dd)}px / ${Math.round(velocity)}px/s`:'スワイプ不成立（距離不足）');
+  }else if(mode==='drag'){log(`相対移動: dx=${Math.round(dx)}, dy=${Math.round(dy)}`)}
+  else if(mode==='longpress'){if(longTimer)clearTimeout(longTimer);log(longFired?'長押し完了':'長押し解除')}
+ }
+ if(mode==='trace'&&start)log('トレース終了: '+trace.length+'点');
+ if(longTimer)clearTimeout(longTimer);longTimer=null;
+ if(start&&(!gesture||gesture.id===e.pointerId)){start=null;last=null;gesture=null}
+ if(mode==='trace'&&pointers.size===0){start=null}
+ if(mode==='pinch'&&pointers.size<2)pinchStart=0;
+ draw();updateMonitor();
+}
+canvas.addEventListener('pointerdown',onDown);
+canvas.addEventListener('pointermove',onMove);
+canvas.addEventListener('pointerup',e=>onUp(e,false));
+canvas.addEventListener('pointercancel',e=>{log('pointercancel: 入力を解除');onUp(e,true)});
+canvas.addEventListener('lostpointercapture',e=>{if(pointers.has(e.pointerId)){log('capture lost: 入力を解除');onUp(e,true)}});
+modeEl.addEventListener('change',setMode);
+$('reset').addEventListener('click',()=>{pointers.clear();buttons={};clearGesture();clickPoints=[];pinchStart=0;log('リセット');draw();updateMonitor()});
+$('vibrate').addEventListener('click',()=>{if(navigator.vibrate){navigator.vibrate(30);log('振動APIを呼び出しました')}else log('この環境ではVibration APIを利用できません')});
+$('threshold').addEventListener('input',()=>{$('thresholdVal').textContent=$('threshold').value+' px'});
+window.addEventListener('resize',resize);
+document.addEventListener('visibilitychange',()=>{if(document.hidden){pointers.clear();buttons={};clearGesture();draw();updateMonitor()}});
+hintEl.textContent=hints[mode];resize();setMode();
+})();
+</script>
+</body>
+</html>
