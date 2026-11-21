@@ -15,11 +15,19 @@ As a testbed, it contains a falling-block puzzle game, "Combo Time - Mystery Spo
 
 ## Sample game / サンプルゲーム
 
-**Combo Time - Mystery Spot Tour** (`index.html`, v7.0.8)
+**Combo Time - Mystery Spot Tour** (`index.html`, v7.1.1)
 
 - A 4-column × 20-row board: drop Tetriminos and complete horizontal lines / 横4列 × 20段の盤面にテトリミノを落とし、横一列を揃えて消す
 - Chaining line clears builds combos with large score multipliers / 連続でラインを消すとコンボが伸び、スコアに大きく倍率がかかる
 - Each level changes the background to another world mystery spot (20 spots in total) / レベルが上がるごとに、世界のミステリースポットを巡る背景（全20スポット）に切り替わる
+
+### What's new in v7.1.1 / v7.1.1の主な変更
+
+- One long-press threshold for every input path: **250 ms** (`LONG_PRESS_MS`), shared by touch buttons, flick input, and keyboard / 長押しの閾値を **250ms**（`LONG_PRESS_MS`）に統一し、タッチボタン・フリック・キーボードで共有
+- Long-pressing left / right now performs a **hard move to the wall**; a short press still moves one cell / 左右の長押しで**壁まで一気に移動**するようにした。短押しは従来通り1マス移動
+- The DROP action is unified everywhere (touch button, ↓ key, down-swipe): pressing starts a soft drop, **releasing quickly (< 250 ms) fires a hard drop**, and releasing after a long press does not / DROP操作をタッチボタン・↓キー・下スワイプで統一した。押すとソフトドロップが始まり、**250ms未満で離すとハードドロップ**、長押し後に離してもハードドロップは発動しない
+- Touch modes expanded from 3 to **4**: MODE 3 is flick movement with clockwise rotation only (counter-clockwise button shown disabled), MODE 4 is the same layout with both rotations enabled / タッチモードを3つから**4つ**に増やした。MODE 3はフリック移動＋時計回りのみの片回転（反時計回りボタンは無効表示）、MODE 4は同じ配置で両回転が有効
+- The performance monitor now also shows the **state of every action input** (none / pressed / long-pressed) for left, right, drop, both rotations, and hold, fed by all input paths / パフォーマンスモニタに、左右・ドロップ・両回転・ホールドの**アクション入力状態（なし／あり／長押し）**表示を追加した。全ての入力系統が同じ表示に集約される
 
 ### How to play / 遊び方
 
@@ -31,13 +39,14 @@ https://kandaudon.github.io/ComboTime/
 
 | Input / 入力 | Action / 操作 |
 | --- | --- |
-| ← / → | Move / 移動 |
-| ↓ | Soft drop / ソフトドロップ |
-| ↑ / Z / X | Rotate / 回転 |
+| ← / → | Move one cell; hold for 250 ms to hard-move to the wall / 1マス移動。250ms長押しで壁まで一気に移動 |
+| ↓ | Soft drop while held; release within 250 ms for a hard drop / 押している間はソフトドロップ。250ms未満で離すとハードドロップ |
+| ↑ / X | Rotate clockwise / 時計回りに回転 |
+| Z | Rotate counter-clockwise / 反時計回りに回転 |
 | Space | Hard drop / ハードドロップ |
 | C / Shift | Hold / ホールド |
-| P | Pause / ポーズ |
-| Touch / タッチ | On-screen buttons and flick input, 3 switchable modes / 画面ボタン／フリックなど3つのモードを切り替え可能 |
+| Esc | Pause / ポーズ |
+| Touch / タッチ | On-screen buttons and flick input, 4 switchable modes / 画面ボタン／フリックなど4つのモードを切り替え可能 |
 | Gamepad / ゲームパッド | Supported; button mapping can be changed in settings / 対応。ボタン割り当ては設定画面で変更可能 |
 
 ## Experiment file / 実験ファイル
