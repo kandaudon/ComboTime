@@ -1,6 +1,6 @@
 <!--
   Combo Time - Mystery Spot Tour
-  Version: 7.0.8
+  Version: 7.1.1
 
   MIT License
 
@@ -29,7 +29,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Combo Time - Mystery Spot Tour v7.0.8</title>
+  <title>Combo Time - Mystery Spot Tour v7.1.1</title>
   <style>
     :root {
       --bg-overlay: rgba(10, 15, 30, 0.65);
@@ -80,10 +80,10 @@
       position: fixed;
       top: 8px;
       right: 8px;
-      background: rgba(15, 23, 42, 0.85);
+      background: rgba(15, 23, 42, 0.9);
       border: 1px solid rgba(56, 189, 248, 0.4);
       border-radius: 6px;
-      padding: 4px 8px;
+      padding: 5px 8px;
       font-family: monospace;
       font-size: 10px;
       color: #38bdf8;
@@ -92,11 +92,12 @@
       flex-direction: column;
       gap: 2px;
       box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+      min-width: 132px;
     }
     .perf-row {
       display: flex;
       justify-content: space-between;
-      gap: 10px;
+      gap: 8px;
     }
     .perf-val {
       color: #fcd34d;
@@ -109,6 +110,22 @@
     .debug-val {
       color: #34d399;
       font-weight: bold;
+    }
+
+    /* アクション状態カラー */
+    .act-state-none {
+      color: #64748b;
+      font-weight: normal;
+    }
+    .act-state-press {
+      color: #38bdf8;
+      font-weight: bold;
+      text-shadow: 0 0 6px rgba(56, 189, 248, 0.6);
+    }
+    .act-state-hold {
+      color: #f59e0b;
+      font-weight: bold;
+      text-shadow: 0 0 6px rgba(245, 158, 11, 0.7);
     }
 
     .game-container {
@@ -247,12 +264,27 @@
       cursor: pointer;
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
       backdrop-filter: blur(4px);
+      touch-action: none;
     }
 
-    .touch-btn:active {
-      background: var(--accent-color);
-      color: #000;
-      transform: scale(0.95);
+    .touch-btn:active:not(:disabled), .touch-btn.is-pressed:not(:disabled) {
+      background: var(--accent-color) !important;
+      color: #000 !important;
+      transform: scale(0.96);
+    }
+
+    .touch-btn.is-long-pressed:not(:disabled) {
+      background: #f59e0b !important;
+      border-color: #fde047 !important;
+      color: #000 !important;
+      box-shadow: 0 0 12px rgba(245, 158, 11, 0.8);
+    }
+
+    .touch-btn:disabled, .touch-btn.is-disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+      pointer-events: none;
+      filter: grayscale(80%);
     }
 
     .modal-overlay {
@@ -557,7 +589,7 @@
 </head>
 <body>
 
-  <div class="version-tag">v77</div>
+  <div class="version-tag">v80</div>
 
   <div class="perf-monitor hidden" id="perfMonitor">
     <div class="perf-row"><span>FPS:</span><span class="perf-val" id="valFps">60</span></div>
@@ -568,6 +600,13 @@
     <div class="perf-row"><span>SPD:</span><span class="debug-val" id="valDbgSpeed">0.0 px/s</span></div>
     <div class="perf-row"><span>GND:</span><span class="debug-val" id="valDbgGround">AIR</span></div>
     <div class="perf-row"><span>LOCK:</span><span class="debug-val" id="valDbgLock">1.00s (0/15)</span></div>
+    <div class="debug-divider"></div>
+    <div class="perf-row"><span>LEFT:</span><span class="act-state-none" id="valActLeft">なし</span></div>
+    <div class="perf-row"><span>RIGHT:</span><span class="act-state-none" id="valActRight">なし</span></div>
+    <div class="perf-row"><span>DROP:</span><span class="act-state-none" id="valActDrop">なし</span></div>
+    <div class="perf-row"><span>ROT CW:</span><span class="act-state-none" id="valActRotCW">なし</span></div>
+    <div class="perf-row"><span>ROT CCW:</span><span class="act-state-none" id="valActRotCCW">なし</span></div>
+    <div class="perf-row"><span>HOLD:</span><span class="act-state-none" id="valActHold">なし</span></div>
   </div>
 
   <canvas id="bgCanvas"></canvas>
@@ -1183,6 +1222,7 @@
     const COLS = 4;
     const ROWS = 20;
     const BLOCK_SIZE = 28;
+    const LONG_PRESS_MS = 250; // 250ms長押し閾値
 
     const SHAPES = {
       I: [[0,0,0,0], [1,1,1,1], [0,0,0,0], [0,0,0,0]],
@@ -1305,6 +1345,46 @@
 
     const keyState = {};
     const gamepadButtonState = {};
+
+    // キーボード左右長押し用タイマー
+    let kbLeftTimer = null;
+    let kbRightTimer = null;
+
+    // Performance Monitor用 アクション入力状態トラッキング ('none' | 'press' | 'hold')
+    const actionVisualState = {
+      left: 'none',
+      right: 'none',
+      drop: 'none',
+      rotCW: 'none',
+      rotCCW: 'none',
+      hold: 'none'
+    };
+    const actionFlashTimers = {};
+
+    function setActionMonitorState(action, state, autoClearMs = 0) {
+      if (!Object.prototype.hasOwnProperty.call(actionVisualState, action)) return;
+      if (actionFlashTimers[action]) {
+        clearTimeout(actionFlashTimers[action]);
+        actionFlashTimers[action] = null;
+      }
+      actionVisualState[action] = state;
+      if (autoClearMs > 0) {
+        actionFlashTimers[action] = setTimeout(() => {
+          actionVisualState[action] = 'none';
+          actionFlashTimers[action] = null;
+        }, autoClearMs);
+      }
+    }
+
+    function resetAllActionMonitorStates() {
+      Object.keys(actionVisualState).forEach(k => {
+        if (actionFlashTimers[k]) {
+          clearTimeout(actionFlashTimers[k]);
+          actionFlashTimers[k] = null;
+        }
+        actionVisualState[k] = 'none';
+      });
+    }
 
     function updateBoardDimensions() {
       boardCanvas.width = COLS * BLOCK_SIZE;
@@ -1451,6 +1531,7 @@
       softDropConsumed = false;
       accumulator = 0;
       lastTime = 0;
+      resetAllActionMonitorStates();
 
       if (replayAnimationFrame) {
         cancelAnimationFrame(replayAnimationFrame);
@@ -1501,6 +1582,7 @@
       holdPiece = null;
       nextPiece = null;
       grid = Array(ROWS).fill(null).map(() => Array(COLS).fill(0));
+      resetAllActionMonitorStates();
 
       hideModals();
       const initialScreen = document.getElementById('initialInputScreen');
@@ -1531,6 +1613,34 @@
         return true;
       }
       return false;
+    }
+
+    function hardMoveLeft() {
+      if (!piece || isGameOver) return false;
+      let moved = false;
+      while (!collide(grid, piece, -1, 0)) {
+        piece.x--;
+        moved = true;
+      }
+      if (moved) {
+        if (collide(grid, piece, 0, 1)) registerLockReset();
+        SFX.move();
+      }
+      return moved;
+    }
+
+    function hardMoveRight() {
+      if (!piece || isGameOver) return false;
+      let moved = false;
+      while (!collide(grid, piece, 1, 0)) {
+        piece.x++;
+        moved = true;
+      }
+      if (moved) {
+        if (collide(grid, piece, 0, 1)) registerLockReset();
+        SFX.move();
+      }
+      return moved;
     }
 
     function hardDrop() {
@@ -1566,9 +1676,28 @@
       SFX.rotate();
     }
 
-    document.getElementById('holdBox').addEventListener('click', () => {
-      if (gameStarted && !isPaused && !isGameOver) hold();
-    });
+    // HOLDパネル：押下即時発動
+    (function setupHoldBoxInput() {
+      const holdBox = document.getElementById('holdBox');
+      if (!holdBox) return;
+      let isTouchHandled = false;
+
+      holdBox.addEventListener('touchstart', (e) => {
+        if (e.cancelable) e.preventDefault();
+        isTouchHandled = true;
+        setActionMonitorState('hold', 'press', 160);
+        if (gameStarted && !isPaused && !isGameOver) hold();
+      }, { passive: false });
+
+      holdBox.addEventListener('mousedown', (e) => {
+        if (isTouchHandled) {
+          isTouchHandled = false;
+          return;
+        }
+        setActionMonitorState('hold', 'press', 160);
+        if (gameStarted && !isPaused && !isGameOver) hold();
+      });
+    })();
 
     function lockPiece() {
       if (!piece || isGameOver) return;
@@ -2200,16 +2329,238 @@
       document.getElementById('btnToggleTouchMode').innerText = `MODE ${options.touchMode}`;
     }
 
+    /**
+     * 単発即時押下専用バインド（ROTATE / HOLD 用）
+     */
+    function bindInstantPress(target, actionName, onPress, stopPropagation = false) {
+      const el = typeof target === 'string' ? document.getElementById(target) : target;
+      if (!el) return;
+
+      let activeTouchId = null;
+      let isMouseDown = false;
+
+      const start = (e) => {
+        if (el.disabled) return;
+        if (stopPropagation) e.stopPropagation();
+        if (e.cancelable) e.preventDefault();
+
+        if (e.type === 'touchstart') {
+          if (activeTouchId !== null) return;
+          activeTouchId = e.changedTouches[0].identifier;
+        } else {
+          if (isMouseDown) return;
+          isMouseDown = true;
+        }
+
+        el.classList.add('is-pressed');
+        if (actionName) setActionMonitorState(actionName, 'press');
+        if (onPress) onPress(e);
+      };
+
+      const end = (e) => {
+        if (e && e.type && e.type.startsWith('touch')) {
+          if (activeTouchId === null) return;
+          let matched = false;
+          for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === activeTouchId) {
+              matched = true;
+              break;
+            }
+          }
+          if (!matched) return;
+          activeTouchId = null;
+        } else {
+          if (!isMouseDown) return;
+          isMouseDown = false;
+        }
+        el.classList.remove('is-pressed');
+        if (actionName) setActionMonitorState(actionName, 'none');
+      };
+
+      el.addEventListener('touchstart', start, { passive: false });
+      el.addEventListener('touchend', end, { passive: false });
+      el.addEventListener('touchcancel', end, { passive: false });
+      el.addEventListener('mousedown', start);
+      el.addEventListener('mouseup', end);
+      el.addEventListener('mouseleave', end);
+    }
+
+    /**
+     * 左右ボタン用：押下即時1マス移動 ＋ 250ms長押しで壁まで一気に端移動
+     */
+    function bindPressAndHoldMove(target, actionName, onPress, onLongPress) {
+      const el = typeof target === 'string' ? document.getElementById(target) : target;
+      if (!el) return;
+
+      let pressTimer = null;
+      let isActive = false;
+      let activeTouchId = null;
+
+      const clearTimer = () => {
+        if (pressTimer) {
+          clearTimeout(pressTimer);
+          pressTimer = null;
+        }
+      };
+
+      const start = (e) => {
+        if (e.cancelable) e.preventDefault();
+        if (isActive) return;
+
+        if (e.type === 'touchstart') {
+          activeTouchId = e.changedTouches[0].identifier;
+        }
+
+        isActive = true;
+        el.classList.add('is-pressed');
+        if (actionName) setActionMonitorState(actionName, 'press');
+
+        if (onPress) onPress(e);
+
+        pressTimer = setTimeout(() => {
+          pressTimer = null;
+          if (!isActive) return;
+          el.classList.add('is-long-pressed');
+          if (actionName) setActionMonitorState(actionName, 'hold');
+          if (onLongPress) onLongPress(e);
+        }, LONG_PRESS_MS);
+      };
+
+      const end = (e) => {
+        if (!isActive) return;
+        if (e && e.type && e.type.startsWith('touch')) {
+          let matched = false;
+          for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === activeTouchId) {
+              matched = true;
+              break;
+            }
+          }
+          if (!matched) return;
+        }
+
+        if (e && e.cancelable) e.preventDefault();
+        clearTimer();
+        isActive = false;
+        activeTouchId = null;
+        el.classList.remove('is-pressed', 'is-long-pressed');
+        if (actionName) setActionMonitorState(actionName, 'none');
+      };
+
+      el.addEventListener('touchstart', start, { passive: false });
+      el.addEventListener('touchend', end, { passive: false });
+      el.addEventListener('touchcancel', end, { passive: false });
+      el.addEventListener('mousedown', start);
+      el.addEventListener('mouseup', end);
+      el.addEventListener('mouseleave', end);
+    }
+
+    /**
+     * DROPボタン用：
+     * - 押下した瞬間に SOFT DROP を即発動（モニタ表示: あり）
+     * - 250ms経過で長押し状態へ移行（モニタ表示: 長押し）
+     * - 250ms未満で離すと HARD DROP を発動
+     * - 250ms以上で離した場合は HARD DROP を発動させない
+     */
+    function setupDropButton(btnId) {
+      const btn = document.getElementById(btnId);
+      if (!btn) return;
+
+      let isActive = false;
+      let activeTouchId = null;
+      let pressStartTime = 0;
+      let targetPieceRef = null;
+      let longPressVisualTimer = null;
+
+      const startDrop = (e) => {
+        if (e.cancelable) e.preventDefault();
+        if (isActive) return;
+
+        if (e.type === 'touchstart') {
+          activeTouchId = e.changedTouches[0].identifier;
+        }
+
+        isActive = true;
+        pressStartTime = performance.now();
+        targetPieceRef = piece;
+        btn.classList.add('is-pressed');
+        setActionMonitorState('drop', 'press');
+
+        if (gameStarted && !isPaused && !isGameOver && piece) {
+          softDropConsumed = false;
+          isSoftDropping = true;
+        }
+
+        if (longPressVisualTimer) clearTimeout(longPressVisualTimer);
+        longPressVisualTimer = setTimeout(() => {
+          longPressVisualTimer = null;
+          if (isActive) {
+            btn.classList.add('is-long-pressed');
+            setActionMonitorState('drop', 'hold');
+          }
+        }, LONG_PRESS_MS);
+      };
+
+      const endDrop = (e) => {
+        if (!isActive) return;
+        if (e && e.type && e.type.startsWith('touch')) {
+          let matched = false;
+          for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === activeTouchId) {
+              matched = true;
+              break;
+            }
+          }
+          if (!matched) return;
+        }
+
+        if (e && e.cancelable) e.preventDefault();
+        if (longPressVisualTimer) {
+          clearTimeout(longPressVisualTimer);
+          longPressVisualTimer = null;
+        }
+
+        const elapsed = performance.now() - pressStartTime;
+        const isCancel = e && (e.type === 'touchcancel' || e.type === 'mouseleave');
+
+        isSoftDropping = false;
+        softDropConsumed = false;
+
+        if (!isCancel && elapsed < LONG_PRESS_MS) {
+          if (gameStarted && !isPaused && !isGameOver && piece && piece === targetPieceRef) {
+            hardDrop();
+          }
+        }
+
+        isActive = false;
+        activeTouchId = null;
+        targetPieceRef = null;
+        btn.classList.remove('is-pressed', 'is-long-pressed');
+        setActionMonitorState('drop', 'none');
+      };
+
+      btn.addEventListener('touchstart', startDrop, { passive: false });
+      btn.addEventListener('touchend', endDrop, { passive: false });
+      btn.addEventListener('touchcancel', endDrop, { passive: false });
+      btn.addEventListener('mousedown', startDrop);
+      btn.addEventListener('mouseup', endDrop);
+      btn.addEventListener('mouseleave', endDrop);
+    }
+
     function renderTouchControls() {
       const container = document.getElementById('virtualControls');
       if (!container) return;
       container.innerHTML = '';
 
       if (options.touchMode === 1) {
+        // MODE 1: HOLDボタンをMODE2と同一配置・同一サイズに統一
         container.innerHTML = `
           <div class="controls-row" style="position: relative; height: 110px; align-items: center;">
             <div style="display: flex; gap: 4px; width: 105px; height: 100%; flex-shrink: 0; position: relative;">
-              <button class="touch-btn" id="btnHoldCustom" style="position: absolute; bottom: 114px; left: 0; width: 105px; background: rgba(20, 30, 50, 0.95); border: 1.5px solid #38bdf8; color: #38bdf8; border-radius: 6px; height: 32px; font-weight: 900; font-size: 11px;">HOLD</button>
+              <button class="touch-btn btn-hold-action" id="btnHoldCustom" style="position: absolute; bottom: 114px; left: 0; width: 105px; height: 110px; background: rgba(20, 30, 50, 0.95); border: 1.5px solid #38bdf8; color: #38bdf8; border-radius: 8px; font-weight: 900; font-size: 13px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+                <span style="font-size: 18px;">⇄</span>
+                <span>HOLD</span>
+              </button>
               <button class="touch-btn" id="btnLeft" style="flex: 1; border-radius: 8px; font-size: 13px;">◀<br>L</button>
               <button class="touch-btn" id="btnRight" style="flex: 1; border-radius: 8px; font-size: 13px;">R<br>▶</button>
             </div>
@@ -2226,15 +2577,12 @@
           <div style="width: 100%; margin-top: 4px;">
             <button class="touch-btn" id="btnHardDrop" style="background: rgba(56, 189, 248, 0.2); border: 1.5px solid rgba(56, 189, 248, 0.6); color: #f8fafc; border-radius: 8px; width: 100%; height: 38px; font-weight: bold; font-size: 12px; display: flex; align-items: center; justify-content: center; gap: 12px; box-shadow: inset 0 0 10px rgba(56,189,248,0.15);">
               <span style="font-size: 12px; color: #38bdf8;">▼▼▼</span>
-              <span style="font-weight: 900; letter-spacing: 1px;">HARD DROP</span>
-              <span style="font-size: 9px; color: #94a3b8; background: rgba(0,0,0,0.4); padding: 2px 8px; border-radius: 10px;">(長押し: SOFT DROP)</span>
+              <span style="font-weight: 900; letter-spacing: 1px;">DROP</span>
+              <span style="font-size: 9px; color: #94a3b8; background: rgba(0,0,0,0.4); padding: 2px 8px; border-radius: 10px;">(短押し: HARD / 長押し: SOFT)</span>
               <span style="font-size: 12px; color: #38bdf8;">▼▼▼</span>
             </button>
           </div>
         `;
-        bindTouch('btnLeft', 'left', true);
-        bindTouch('btnRight', 'right', true);
-        bindTouch('btnRotCW', 'rotCW');
       } else if (options.touchMode === 2) {
         container.innerHTML = `
           <div class="controls-row" style="position: relative; height: 110px; align-items: center; display: flex; gap: 4px; justify-content: center;">
@@ -2265,21 +2613,58 @@
           <div style="width: 100%; margin-top: 4px;">
             <button class="touch-btn" id="btnHardDrop" style="background: rgba(56, 189, 248, 0.2); border: 1.5px solid rgba(56, 189, 248, 0.6); color: #f8fafc; border-radius: 8px; width: 100%; height: 38px; font-weight: bold; font-size: 12px; display: flex; align-items: center; justify-content: center; gap: 12px; box-shadow: inset 0 0 10px rgba(56,189,248,0.15);">
               <span style="font-size: 12px; color: #38bdf8;">▼▼▼</span>
-              <span style="font-weight: 900; letter-spacing: 1px;">HARD DROP</span>
-              <span style="font-size: 9px; color: #94a3b8; background: rgba(0,0,0,0.4); padding: 2px 8px; border-radius: 10px;">(長押し: SOFT DROP)</span>
+              <span style="font-weight: 900; letter-spacing: 1px;">DROP</span>
+              <span style="font-size: 9px; color: #94a3b8; background: rgba(0,0,0,0.4); padding: 2px 8px; border-radius: 10px;">(短押し: HARD / 長押し: SOFT)</span>
               <span style="font-size: 12px; color: #38bdf8;">▼▼▼</span>
             </button>
           </div>
         `;
-        bindTouch('btnLeft', 'left', true);
-        bindTouch('btnRight', 'right', true);
-        bindTouch('btnRotCW', 'rotCW');
-        bindTouch('btnRotCCW', 'rotCCW');
         setupFlickArea('flickMoveArea');
-      } else {
+      } else if (options.touchMode === 3) {
+        // MODE 3: CCWボタンを無効化
         container.innerHTML = `
           <div class="controls-row" style="position: relative; height: 110px; align-items: center; display: flex; gap: 4px; justify-content: center;">
             <div id="flickMoveAreaMode3" style="display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 4px; width: 105px; height: 100%; flex-shrink: 0; position: relative; background: rgba(20, 30, 50, 0.6); border: 1.5px dashed rgba(56, 189, 248, 0.4); border-radius: 8px; touch-action: none;">
+              <button class="touch-btn btn-hold-action" id="btnHoldCustom" style="position: absolute; bottom: 114px; left: 0; width: 105px; height: 110px; background: rgba(20, 30, 50, 0.95); border: 1.5px solid #38bdf8; color: #38bdf8; border-radius: 8px; font-weight: 900; font-size: 13px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+                <span style="font-size: 18px;">⇄</span>
+                <span>HOLD</span>
+              </button>
+              <span style="font-size: 18px; color: #38bdf8;">↔</span>
+              <span style="font-size: 10px; color: #38bdf8; font-weight: bold; letter-spacing: 1px;">FLICK MOVE</span>
+            </div>
+
+            <button class="touch-btn is-disabled" id="btnRotCCW" disabled style="display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 4px; flex-shrink: 0; width: 112px; height: 110px; overflow: hidden; border-radius: 8px; border: 1.5px solid #a855f7; background: rgba(20, 15, 45, 0.95); color: #c084fc; font-weight: 900; font-size: 12px; position: relative; padding: 0;">
+              <span style="font-size: 22px;">↺</span>
+              <span>ROTATE</span>
+              <span style="font-size: 9px; color: #94a3b8; font-family: monospace; opacity: 0.8;">(DISABLED)</span>
+            </button>
+
+            <div style="width: 105px; height: 100%; flex-shrink: 0; position: relative;">
+              <button class="touch-btn btn-hold-action" id="btnHoldRight" style="position: absolute; bottom: 114px; left: 0; width: 105px; height: 110px; background: rgba(20, 30, 50, 0.95); border: 1.5px solid #38bdf8; color: #38bdf8; border-radius: 8px; font-weight: 900; font-size: 13px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+                <span style="font-size: 18px;">⇄</span>
+                <span>HOLD</span>
+              </button>
+              <button class="touch-btn" id="btnRotCW" style="background: rgba(20, 30, 50, 0.95); border: 1.5px solid #f59e0b; color: #f59e0b; border-radius: 10px; width: 100%; height: 100%; font-weight: 900; font-size: 13px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+                <span style="font-size: 22px;">↻</span>
+                <span>ROTATE</span>
+              </button>
+            </div>
+          </div>
+          <div style="width: 100%; margin-top: 4px;">
+            <button class="touch-btn" id="btnHardDrop" style="background: rgba(56, 189, 248, 0.2); border: 1.5px solid rgba(56, 189, 248, 0.6); color: #f8fafc; border-radius: 8px; width: 100%; height: 38px; font-weight: bold; font-size: 12px; display: flex; align-items: center; justify-content: center; gap: 12px; box-shadow: inset 0 0 10px rgba(56,189,248,0.15);">
+              <span style="font-size: 12px; color: #38bdf8;">▼▼▼</span>
+              <span style="font-weight: 900; letter-spacing: 1px;">DROP</span>
+              <span style="font-size: 9px; color: #94a3b8; background: rgba(0,0,0,0.4); padding: 2px 8px; border-radius: 10px;">(短押し: HARD / 長押し: SOFT)</span>
+              <span style="font-size: 12px; color: #38bdf8;">▼▼▼</span>
+            </button>
+          </div>
+        `;
+        setupFlickArea('flickMoveAreaMode3');
+      } else {
+        // MODE 4: MODE 3 のコピーで CCW ボタンを有効化
+        container.innerHTML = `
+          <div class="controls-row" style="position: relative; height: 110px; align-items: center; display: flex; gap: 4px; justify-content: center;">
+            <div id="flickMoveAreaMode4" style="display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 4px; width: 105px; height: 100%; flex-shrink: 0; position: relative; background: rgba(20, 30, 50, 0.6); border: 1.5px dashed rgba(56, 189, 248, 0.4); border-radius: 8px; touch-action: none;">
               <button class="touch-btn btn-hold-action" id="btnHoldCustom" style="position: absolute; bottom: 114px; left: 0; width: 105px; height: 110px; background: rgba(20, 30, 50, 0.95); border: 1.5px solid #38bdf8; color: #38bdf8; border-radius: 8px; font-weight: 900; font-size: 13px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
                 <span style="font-size: 18px;">⇄</span>
                 <span>HOLD</span>
@@ -2308,32 +2693,46 @@
           <div style="width: 100%; margin-top: 4px;">
             <button class="touch-btn" id="btnHardDrop" style="background: rgba(56, 189, 248, 0.2); border: 1.5px solid rgba(56, 189, 248, 0.6); color: #f8fafc; border-radius: 8px; width: 100%; height: 38px; font-weight: bold; font-size: 12px; display: flex; align-items: center; justify-content: center; gap: 12px; box-shadow: inset 0 0 10px rgba(56,189,248,0.15);">
               <span style="font-size: 12px; color: #38bdf8;">▼▼▼</span>
-              <span style="font-weight: 900; letter-spacing: 1px;">HARD DROP</span>
-              <span style="font-size: 9px; color: #94a3b8; background: rgba(0,0,0,0.4); padding: 2px 8px; border-radius: 10px;">(長押し: SOFT DROP)</span>
+              <span style="font-weight: 900; letter-spacing: 1px;">DROP</span>
+              <span style="font-size: 9px; color: #94a3b8; background: rgba(0,0,0,0.4); padding: 2px 8px; border-radius: 10px;">(短押し: HARD / 長押し: SOFT)</span>
               <span style="font-size: 12px; color: #38bdf8;">▼▼▼</span>
             </button>
           </div>
         `;
-        bindTouch('btnRotCW', 'rotCW');
-        bindTouch('btnRotCCW', 'rotCCW');
-        setupFlickArea('flickMoveAreaMode3');
+        setupFlickArea('flickMoveAreaMode4');
+      }
+
+      bindPressAndHoldMove(
+        'btnLeft',
+        'left',
+        () => { if (gameStarted && !isPaused && !isGameOver) moveLeft(); },
+        () => { if (gameStarted && !isPaused && !isGameOver) hardMoveLeft(); }
+      );
+
+      bindPressAndHoldMove(
+        'btnRight',
+        'right',
+        () => { if (gameStarted && !isPaused && !isGameOver) moveRight(); },
+        () => { if (gameStarted && !isPaused && !isGameOver) hardMoveRight(); }
+      );
+
+      bindInstantPress('btnRotCW', 'rotCW', () => {
+        if (gameStarted && !isPaused && !isGameOver) rotatePiece(1);
+      });
+
+      if (options.touchMode !== 3) {
+        bindInstantPress('btnRotCCW', 'rotCCW', () => {
+          if (gameStarted && !isPaused && !isGameOver) rotatePiece(-1);
+        });
       }
 
       ['btnHoldCustom', 'btnHoldRight'].forEach(id => {
-        const btn = document.getElementById(id);
-        if (btn) {
-          btn.addEventListener('touchstart', (e) => {
-            e.stopPropagation();
-            if (gameStarted && !isPaused && !isGameOver) hold();
-          }, { passive: false });
-          btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            if (gameStarted && !isPaused && !isGameOver) hold();
-          });
-        }
+        bindInstantPress(id, 'hold', () => {
+          if (gameStarted && !isPaused && !isGameOver) hold();
+        }, true);
       });
 
-      setupHardDropButton('btnHardDrop');
+      setupDropButton('btnHardDrop');
     }
 
     function setupFlickArea(areaId) {
@@ -2343,10 +2742,36 @@
       let activeTouchId = null;
       let touchStartX = 0;
       let touchStartY = 0;
-      let touchStartTime = 0;
+      let swipeDir = null;
+      let swipeTime = 0;
+      let targetPieceRef = null;
+      let holdTimer = null;
+      let isLong = false;
 
-      const FLICK_MIN_DISTANCE = 20; // フリックとみなす最小横移動距離(px)
-      const FLICK_MAX_DURATION = 350; // フリックとみなす最大時間(ms)
+      const SWIPE_THRESHOLD = 16;
+
+      const clearHoldTimer = () => {
+        if (holdTimer) {
+          clearTimeout(holdTimer);
+          holdTimer = null;
+        }
+      };
+
+      const triggerLongAction = () => {
+        holdTimer = null;
+        if (activeTouchId === null) return;
+        isLong = true;
+        area.style.borderColor = '#f59e0b';
+        area.style.backgroundColor = 'rgba(245, 158, 11, 0.25)';
+
+        if (swipeDir === 'left') {
+          setActionMonitorState('left', 'hold');
+          if (gameStarted && !isPaused && !isGameOver && piece) hardMoveLeft();
+        } else if (swipeDir === 'right') {
+          setActionMonitorState('right', 'hold');
+          if (gameStarted && !isPaused && !isGameOver && piece) hardMoveRight();
+        }
+      };
 
       area.addEventListener('touchstart', (e) => {
         if (activeTouchId !== null) return;
@@ -2354,20 +2779,16 @@
         activeTouchId = touch.identifier;
         touchStartX = touch.clientX;
         touchStartY = touch.clientY;
-        touchStartTime = performance.now();
+        swipeDir = null;
+        swipeTime = 0;
+        targetPieceRef = piece;
+        isLong = false;
+
+        area.style.borderColor = '#38bdf8';
+        clearHoldTimer();
       }, { passive: true });
 
       area.addEventListener('touchmove', (e) => {
-        if (activeTouchId === null) return;
-        for (let i = 0; i < e.changedTouches.length; i++) {
-          if (e.changedTouches[i].identifier === activeTouchId) {
-            if (e.cancelable) e.preventDefault();
-            break;
-          }
-        }
-      }, { passive: false });
-
-      const endFlick = (e) => {
         if (activeTouchId === null) return;
         let targetTouch = null;
         for (let i = 0; i < e.changedTouches.length; i++) {
@@ -2377,72 +2798,102 @@
           }
         }
         if (!targetTouch) return;
-
-        activeTouchId = null;
-        if (e.type === 'touchcancel') return;
-        if (!gameStarted || isPaused || isGameOver || !piece) return;
+        if (e.cancelable) e.preventDefault();
 
         const diffX = targetTouch.clientX - touchStartX;
         const diffY = targetTouch.clientY - touchStartY;
-        const duration = performance.now() - touchStartTime;
 
-        // 素早い横方向のフリック操作であれば1コマだけ移動
-        if (
-          duration <= FLICK_MAX_DURATION &&
-          Math.abs(diffX) >= FLICK_MIN_DISTANCE &&
-          Math.abs(diffX) > Math.abs(diffY)
-        ) {
-          if (diffX > 0) {
-            moveRight();
-          } else {
-            moveLeft();
+        if (swipeDir === null) {
+          if (Math.abs(diffX) >= SWIPE_THRESHOLD || Math.abs(diffY) >= SWIPE_THRESHOLD) {
+            swipeTime = performance.now();
+
+            if (Math.abs(diffX) >= Math.abs(diffY)) {
+              swipeDir = diffX > 0 ? 'right' : 'left';
+              setActionMonitorState(swipeDir, 'press');
+              if (gameStarted && !isPaused && !isGameOver && piece) {
+                if (swipeDir === 'right') moveRight();
+                else moveLeft();
+              }
+              clearHoldTimer();
+              isLong = false;
+              holdTimer = setTimeout(triggerLongAction, LONG_PRESS_MS);
+            } else if (diffY > 0) {
+              swipeDir = 'down';
+              setActionMonitorState('drop', 'press');
+              if (gameStarted && !isPaused && !isGameOver && piece) {
+                softDropConsumed = false;
+                isSoftDropping = true;
+              }
+              clearHoldTimer();
+              holdTimer = setTimeout(() => {
+                if (swipeDir === 'down' && activeTouchId !== null) {
+                  setActionMonitorState('drop', 'hold');
+                }
+              }, LONG_PRESS_MS);
+            } else {
+              swipeDir = 'up';
+              setActionMonitorState('rotCW', 'press', 160);
+              if (gameStarted && !isPaused && !isGameOver && piece) {
+                rotatePiece(1);
+              }
+            }
+          }
+        } else if (isLong && (swipeDir === 'left' || swipeDir === 'right')) {
+          if (swipeDir === 'left' && diffX > SWIPE_THRESHOLD) {
+            setActionMonitorState('left', 'none');
+            swipeDir = 'right';
+            setActionMonitorState('right', 'hold');
+            if (gameStarted && !isPaused && !isGameOver) hardMoveRight();
+          } else if (swipeDir === 'right' && diffX < -SWIPE_THRESHOLD) {
+            setActionMonitorState('right', 'none');
+            swipeDir = 'left';
+            setActionMonitorState('left', 'hold');
+            if (gameStarted && !isPaused && !isGameOver) hardMoveLeft();
           }
         }
-      };
+      }, { passive: false });
 
-      area.addEventListener('touchend', endFlick, { passive: true });
-      area.addEventListener('touchcancel', endFlick, { passive: true });
-    }
-
-    function setupHardDropButton(btnId) {
-      const btn = document.getElementById(btnId);
-      if (!btn) return;
-
-      let pressTimer = null;
-      let isLongPress = false;
-
-      const startPress = (e) => {
-        if (e.cancelable) e.preventDefault();
-        isLongPress = false;
-        pressTimer = setTimeout(() => {
-          isLongPress = true;
-          if (!softDropConsumed) {
-            isSoftDropping = true;
+      const endGesture = (e) => {
+        if (activeTouchId === null) return;
+        let matched = false;
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          if (e.changedTouches[i].identifier === activeTouchId) {
+            matched = true;
+            break;
           }
-        }, 250);
-      };
-
-      const endPress = (e) => {
-        if (e.cancelable) e.preventDefault();
-        if (pressTimer) {
-          clearTimeout(pressTimer);
-          pressTimer = null;
         }
-        if (isLongPress) {
+        if (!matched) return;
+
+        clearHoldTimer();
+
+        if (swipeDir === 'left') {
+          setActionMonitorState('left', 'none');
+        } else if (swipeDir === 'right') {
+          setActionMonitorState('right', 'none');
+        } else if (swipeDir === 'down') {
+          const elapsed = performance.now() - swipeTime;
           isSoftDropping = false;
           softDropConsumed = false;
-        } else {
-          if (gameStarted && !isPaused && !isGameOver) {
-            hardDrop();
+          setActionMonitorState('drop', 'none');
+
+          if (e.type !== 'touchcancel' && elapsed < LONG_PRESS_MS) {
+            if (gameStarted && !isPaused && !isGameOver && piece && piece === targetPieceRef) {
+              hardDrop();
+            }
           }
         }
-        isLongPress = false;
+
+        activeTouchId = null;
+        swipeDir = null;
+        swipeTime = 0;
+        targetPieceRef = null;
+        isLong = false;
+        area.style.borderColor = '';
+        area.style.backgroundColor = '';
       };
 
-      btn.addEventListener('touchstart', startPress, { passive: false });
-      btn.addEventListener('touchend', endPress, { passive: false });
-      btn.addEventListener('mousedown', startPress);
-      btn.addEventListener('mouseup', endPress);
+      area.addEventListener('touchend', endGesture, { passive: true });
+      area.addEventListener('touchcancel', endGesture, { passive: true });
     }
 
     function renderRankingList() {
@@ -2554,6 +3005,32 @@
           dbgLockEl.innerText = `${LOCK_DELAY.toFixed(2)}s (0/${maxResets})`;
         }
       }
+
+      // 全アクション入力状態の表示更新（なし・あり・長押しを色で表示）
+      const actMap = {
+        left: 'valActLeft',
+        right: 'valActRight',
+        drop: 'valActDrop',
+        rotCW: 'valActRotCW',
+        rotCCW: 'valActRotCCW',
+        hold: 'valActHold'
+      };
+
+      Object.keys(actMap).forEach(key => {
+        const el = document.getElementById(actMap[key]);
+        if (!el) return;
+        const st = actionVisualState[key];
+        if (st === 'hold') {
+          el.innerText = '長押し';
+          el.className = 'act-state-hold';
+        } else if (st === 'press') {
+          el.innerText = 'あり';
+          el.className = 'act-state-press';
+        } else {
+          el.innerText = 'なし';
+          el.className = 'act-state-none';
+        }
+      });
     }
 
     function update(time = 0) {
@@ -2614,10 +3091,13 @@
         if (action === 'softDrop') {
           if (isPressed) {
             if (!softDropConsumed) isSoftDropping = true;
-          } else {
+            setActionMonitorState('drop', 'hold');
+          } else if (gamepadButtonState[action]) {
             isSoftDropping = false;
             softDropConsumed = false;
+            setActionMonitorState('drop', 'none');
           }
+          gamepadButtonState[action] = isPressed;
         } else {
           if (isPressed && !gamepadButtonState[action]) {
             executeAction(action);
@@ -2640,14 +3120,37 @@
       if (isPaused) return;
 
       switch (action) {
-        case 'left': moveLeft(); break;
-        case 'right': moveRight(); break;
-        case 'hardDrop': hardDrop(); break;
-        case 'rotCW': rotatePiece(1); break;
-        case 'rotCCW': rotatePiece(-1); break;
-        case 'hold': hold(); break;
+        case 'left':
+          setActionMonitorState('left', 'press', 160);
+          moveLeft();
+          break;
+        case 'right':
+          setActionMonitorState('right', 'press', 160);
+          moveRight();
+          break;
+        case 'hardDrop':
+          setActionMonitorState('drop', 'press', 160);
+          hardDrop();
+          break;
+        case 'rotCW':
+          setActionMonitorState('rotCW', 'press', 160);
+          rotatePiece(1);
+          break;
+        case 'rotCCW':
+          setActionMonitorState('rotCCW', 'press', 160);
+          rotatePiece(-1);
+          break;
+        case 'hold':
+          setActionMonitorState('hold', 'press', 160);
+          hold();
+          break;
       }
     }
+
+    // キーボード入力（左右長押し対応 + 各種アクション状態トラッキング）
+    let kbDownStartTime = 0;
+    let kbDownTargetPiece = null;
+    let kbDownHoldTimer = null;
 
     window.addEventListener('keydown', e => {
       const initialScreen = document.getElementById('initialInputScreen');
@@ -2683,40 +3186,112 @@
       if (keyState[e.code]) return;
       keyState[e.code] = true;
 
-      if (e.code === 'ArrowDown') {
-        if (!softDropConsumed) {
-          isSoftDropping = true;
-        }
-        if (!gameStarted) { startGame(); return; }
-        return;
-      }
-
       if (!gameStarted) { startGame(); return; }
       if (e.code === 'Escape') { togglePause(); return; }
       if (isPaused || isGameOver) return;
 
       switch (e.code) {
-        case 'ArrowLeft': moveLeft(); break;
-        case 'ArrowRight': moveRight(); break;
-        case 'ArrowUp': case 'KeyX': rotatePiece(1); break;
-        case 'KeyZ': rotatePiece(-1); break;
-        case 'Space': hardDrop(); break;
-        case 'KeyC': case 'ShiftLeft': hold(); break;
+        case 'ArrowLeft': {
+          setActionMonitorState('left', 'press');
+          moveLeft();
+          if (kbLeftTimer) clearTimeout(kbLeftTimer);
+          kbLeftTimer = setTimeout(() => {
+            kbLeftTimer = null;
+            if (keyState['ArrowLeft'] && gameStarted && !isPaused && !isGameOver) {
+              setActionMonitorState('left', 'hold');
+              hardMoveLeft();
+            }
+          }, LONG_PRESS_MS);
+          break;
+        }
+        case 'ArrowRight': {
+          setActionMonitorState('right', 'press');
+          moveRight();
+          if (kbRightTimer) clearTimeout(kbRightTimer);
+          kbRightTimer = setTimeout(() => {
+            kbRightTimer = null;
+            if (keyState['ArrowRight'] && gameStarted && !isPaused && !isGameOver) {
+              setActionMonitorState('right', 'hold');
+              hardMoveRight();
+            }
+          }, LONG_PRESS_MS);
+          break;
+        }
+        case 'ArrowDown': {
+          kbDownStartTime = performance.now();
+          kbDownTargetPiece = piece;
+          setActionMonitorState('drop', 'press');
+          if (!softDropConsumed) {
+            isSoftDropping = true;
+          }
+          if (kbDownHoldTimer) clearTimeout(kbDownHoldTimer);
+          kbDownHoldTimer = setTimeout(() => {
+            kbDownHoldTimer = null;
+            if (keyState['ArrowDown']) {
+              setActionMonitorState('drop', 'hold');
+            }
+          }, LONG_PRESS_MS);
+          break;
+        }
+        case 'ArrowUp':
+        case 'KeyX':
+          setActionMonitorState('rotCW', 'press');
+          rotatePiece(1);
+          break;
+        case 'KeyZ':
+          setActionMonitorState('rotCCW', 'press');
+          rotatePiece(-1);
+          break;
+        case 'Space':
+          setActionMonitorState('drop', 'press');
+          hardDrop();
+          break;
+        case 'KeyC':
+        case 'ShiftLeft':
+          setActionMonitorState('hold', 'press');
+          hold();
+          break;
       }
     });
 
     window.addEventListener('keyup', e => {
       keyState[e.code] = false;
-      if (e.code === 'ArrowDown') {
+
+      if (e.code === 'ArrowLeft') {
+        if (kbLeftTimer) { clearTimeout(kbLeftTimer); kbLeftTimer = null; }
+        setActionMonitorState('left', 'none');
+      } else if (e.code === 'ArrowRight') {
+        if (kbRightTimer) { clearTimeout(kbRightTimer); kbRightTimer = null; }
+        setActionMonitorState('right', 'none');
+      } else if (e.code === 'ArrowDown') {
+        if (kbDownHoldTimer) { clearTimeout(kbDownHoldTimer); kbDownHoldTimer = null; }
+        const elapsed = performance.now() - kbDownStartTime;
         isSoftDropping = false;
         softDropConsumed = false;
+        setActionMonitorState('drop', 'none');
+        if (elapsed < LONG_PRESS_MS && gameStarted && !isPaused && !isGameOver && piece && piece === kbDownTargetPiece) {
+          hardDrop();
+        }
+        kbDownTargetPiece = null;
+      } else if (e.code === 'Space') {
+        setActionMonitorState('drop', 'none');
+      } else if (e.code === 'ArrowUp' || e.code === 'KeyX') {
+        setActionMonitorState('rotCW', 'none');
+      } else if (e.code === 'KeyZ') {
+        setActionMonitorState('rotCCW', 'none');
+      } else if (e.code === 'KeyC' || e.code === 'ShiftLeft') {
+        setActionMonitorState('hold', 'none');
       }
     });
 
     window.addEventListener('blur', () => {
       Object.keys(keyState).forEach(k => keyState[k] = false);
+      if (kbLeftTimer) { clearTimeout(kbLeftTimer); kbLeftTimer = null; }
+      if (kbRightTimer) { clearTimeout(kbRightTimer); kbRightTimer = null; }
+      if (kbDownHoldTimer) { clearTimeout(kbDownHoldTimer); kbDownHoldTimer = null; }
       isSoftDropping = false;
       softDropConsumed = false;
+      resetAllActionMonitorStates();
     });
 
     document.getElementById('pressStartText').addEventListener('click', (e) => {
@@ -2734,46 +3309,6 @@
         renderRankingList();
       });
     });
-
-    function bindTouch(btnId, action, isSingleTap = false) {
-      const btn = document.getElementById(btnId);
-      if (!btn) return;
-      
-      if (action === 'softDrop') {
-        const startSD = (e) => {
-          if (e.cancelable) e.preventDefault();
-          if (!softDropConsumed) isSoftDropping = true;
-        };
-        const endSD = (e) => {
-          if (e.cancelable) e.preventDefault();
-          isSoftDropping = false;
-          softDropConsumed = false;
-        };
-        btn.addEventListener('touchstart', startSD, { passive: false });
-        btn.addEventListener('touchend', endSD, { passive: false });
-        btn.addEventListener('touchcancel', endSD, { passive: false });
-        btn.addEventListener('mousedown', startSD);
-        btn.addEventListener('mouseup', endSD);
-        btn.addEventListener('mouseleave', endSD);
-      } else if (isSingleTap) {
-        const triggerAction = (e) => {
-          if (e.cancelable) e.preventDefault();
-          if (!gameStarted) return;
-          if (!isPaused && !isGameOver) {
-            if (action === 'left') moveLeft();
-            if (action === 'right') moveRight();
-          }
-        };
-        btn.addEventListener('touchstart', triggerAction, { passive: false });
-        btn.addEventListener('click', triggerAction);
-      } else {
-        btn.addEventListener('touchstart', (e) => {
-          e.preventDefault();
-          executeAction(action);
-        }, { passive: false });
-        btn.addEventListener('click', () => executeAction(action));
-      }
-    }
 
     document.getElementById('btnCharUp').addEventListener('click', () => {
       initials[initialIndex] = String.fromCharCode(initials[initialIndex].charCodeAt(0) === 90 ? 65 : initials[initialIndex].charCodeAt(0) + 1);
@@ -2796,8 +3331,12 @@
       if (isGameOver || !gameStarted) return;
       isPaused = !isPaused;
       document.getElementById('pauseModal').classList.toggle('active', isPaused);
-      if (isPaused) stopBGM();
-      else startBGM();
+      if (isPaused) {
+        stopBGM();
+        resetAllActionMonitorStates();
+      } else {
+        startBGM();
+      }
     }
 
     function hideModals() {
@@ -2835,7 +3374,7 @@
     });
 
     document.getElementById('btnToggleTouchMode').addEventListener('click', () => {
-      options.touchMode = options.touchMode === 1 ? 2 : (options.touchMode === 2 ? 3 : 1);
+      options.touchMode = (options.touchMode % 4) + 1;
       updateUI();
       renderTouchControls();
     });
